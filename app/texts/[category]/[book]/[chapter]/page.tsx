@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { BookOpen, Search, Settings, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Bookmark, Share, TimerIcon as Timeline, Hash, Plus, TreePine, BookMarked, X, Filter } from "lucide-react"
+import { BookOpen, Search, Settings, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Bookmark, Share, TimerIcon as Timeline, Hash, Plus, TreePine, BookMarked, X, Filter, Star, Calendar, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,6 +47,14 @@ interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
 }
+
+const safeLearning = {
+  parasha: "-",
+  dafYomi: "-",
+  mishnahYomi: "-",
+  date: "-",
+  hebrewDate: "-"
+};
 
 // Sample data for the graph
 const sampleGraphData: GraphData = {
@@ -481,6 +489,15 @@ export default function ChapterPage({ params }: ChapterPageProps) {
     author: [] as string[],
     timePeriod: [] as string[]
   })
+  // Time Period filter chips state
+  const [selectedTimePeriods, setSelectedTimePeriods] = useState<string[]>(["Biblical","Tannaitic","Amoraic"]) // default selected
+  const toggleTimePeriod = (value: string) => {
+    setSelectedTimePeriods((prev: string[]) => {
+      const next = prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+      setActiveFilters((f: { genre: string[]; author: string[]; timePeriod: string[] }) => ({ ...f, timePeriod: next }))
+      return next
+    })
+  }
   const graphRef = useRef<HTMLDivElement>(null)
   const leftPanelRef = useRef<HTMLDivElement>(null)
   const rightPanelRef = useRef<HTMLDivElement>(null)
@@ -745,149 +762,102 @@ export default function ChapterPage({ params }: ChapterPageProps) {
               transition={{ duration: 0.3 }}
               className="w-80 bg-white border-r border-slate-200 flex flex-col"
             >
-              <div className="p-4 border-b border-slate-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-900">Navigation & Tools</h3>
+              <div className="p-4 border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h1 className="font-semibold text-slate-900 text-xl">Navigation & Tools</h1>
                   <Button variant="ghost" size="sm" onClick={() => setLeftSidebarOpen(false)}>
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
                 </div>
+                </div>
 
-
+                
+              <div className="mb-4">
+                <Card className="border-blue-800">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg text-blue-900 flex items-center">
+                      <Star className="w-4 h-4 mr-2" />
+                      Today's Learning
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600">{safeLearning.date}</span>
+                        <span className="font-hebrew text-blue-800">{safeLearning.hebrewDate}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">Parasha:</span>
+                        <Badge variant="secondary">{safeLearning.parasha}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">Daf Yomi:</span>
+                        <Badge variant="secondary">{safeLearning.dafYomi}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">Mishnah:</span>
+                        <Badge variant="secondary">{safeLearning.mishnahYomi}</Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
                 {/* Search */}
-                <div className="relative mb-4">
+              <div className="pt-8 pl-6 pr-6 border-t border-slate-200">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
                   <Input placeholder="Search texts..." className="pl-10" />
                 </div>
-              </div>
-
-              <ScrollArea className="flex-1 p-4">
+              
                 {/* Time Period Filter */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-slate-900 mb-3 flex items-center">
+                <div className="pt-8 pl-2 pr-2">
+                  <h4 className="font-medium text-slate-900 mb-3 flex items-center text-lg">
                     <Clock className="w-4 h-4 mr-2" />
                     Time Period
                   </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="biblical" className="rounded" defaultChecked />
-                      <label htmlFor="biblical" className="text-sm text-slate-700">
-                        Biblical (-1200 to 0)
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="tannaitic" className="rounded" defaultChecked />
-                      <label htmlFor="tannaitic" className="text-sm text-slate-700">
-                        Tannaitic (0-220)
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="amoraic" className="rounded" defaultChecked />
-                      <label htmlFor="amoraic" className="text-sm text-slate-700">
-                        Amoraic (220-500)
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="medieval" className="rounded" defaultChecked />
-                      <label htmlFor="medieval" className="text-sm text-slate-700">
-                        Medieval (500-1500)
-                      </label>
-                    </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { key: "Biblical", label: "Biblical (-1200 to 0)" },
+                      { key: "Tannaitic", label: "Tannaitic (0-220)" },
+                      { key: "Amoraic", label: "Amoraic (220-500)" },
+                      { key: "Medieval", label: "Medieval (500-1500)" },
+                    ].map(({ key, label }) => {
+                      const active = selectedTimePeriods.includes(key)
+                      return (
+                        <motion.button
+                          key={key}
+                          type="button"
+                          onClick={() => toggleTimePeriod(key)}
+                          initial={false}
+                          animate={{ scale: active ? 1.02 : 1, opacity: 1 }}
+                          whileHover={{ y: -1, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                          transition={{ duration: 0.2 }}
+                          className={`group relative w-full text-left px-3 py-2 rounded-md border backdrop-blur-sm transition-colors ${
+                            active ? "bg-blue-50/70 border-blue-400" : "bg-white/60 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {/* Animated check container */}
+                          <span className={`inline-flex items-center justify-center w-5 h-5 mr-2 align-middle rounded-sm border ${active ? "bg-blue-600 border-blue-600" : "bg-white border-slate-300"}`}>
+                            <motion.span
+                              initial={false}
+                              animate={{ scale: active ? 1 : 0, opacity: active ? 1 : 0 }}
+                              transition={{ duration: 0.15 }}
+                              className="text-white"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </motion.span>
+                          </span>
+                          <span className="text-sm text-slate-800 align-middle">{label}</span>
+                        </motion.button>
+                      )
+                    })}
                   </div>
                 </div>
 
-                {/* Advanced Tools */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-slate-900 mb-3">Advanced Tools</h4>
-                  <div className="space-y-2">
-                    {/* Feature 6: Author Map */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start bg-transparent"
-                      onClick={() => setAuthorMapView(true)}
-                    >
-                      <Map className="w-4 h-4 mr-2" />
-                      Author Timeline Map
-                    </Button>
-                    {/* Feature 7: Conceptual Index */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start bg-transparent"
-                      onClick={() => setActiveRightTab("concepts")}
-                    >
-                      <Tag className="w-4 h-4 mr-2" />
-                      Concept Index
-                    </Button>
-                    {/* Feature 8: Word Maps (Lexical Hypergraph) */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start bg-transparent"
-                      onClick={() => setLexicalGraphView(true)}
-                    >
-                      <Hash className="w-4 h-4 mr-2" />
-                      Word Maps
-                    </Button>
-                  </div>
-                </div>
-
-                {/* AI Settings - Feature 5 */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-slate-900 mb-3 flex items-center">
-                    <Brain className="w-4 h-4 mr-2" />
-                    AI Commentary
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">Enable AI Layer</span>
-                      <Switch checked={aiLayering} onCheckedChange={setAiLayering} />
-                    </div>
-                    {aiLayering && (
-                      <Select value={aiMode} onValueChange={setAiMode}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pshat">Pshat (Literal)</SelectItem>
-                          <SelectItem value="halakhic">Halakhic</SelectItem>
-                          <SelectItem value="mystical">Mystical</SelectItem>
-                          <SelectItem value="all">All Layers</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-
-                {/* Annotation Settings - Feature 9 */}
-                <div>
-                  <h4 className="font-medium text-slate-900 mb-3 flex items-center">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Annotations
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">Annotation Mode</span>
-                      <Switch checked={annotationMode} onCheckedChange={setAnnotationMode} />
-                    </div>
-                    {annotationMode && (
-                      <Select value={selectedAnnotationType} onValueChange={setSelectedAnnotationType}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="halakhic">Halakhic</SelectItem>
-                          <SelectItem value="pshat">Pshat</SelectItem>
-                          <SelectItem value="aggadic">Aggadic</SelectItem>
-                          <SelectItem value="linguistic">Linguistic</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-              </ScrollArea>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -910,29 +880,59 @@ export default function ChapterPage({ params }: ChapterPageProps) {
               </div>
 
               <div className="flex items-center space-x-2">
-                {/* Display Mode Controls */}
-                <div className="flex items-center space-x-1">
-                  <Button
-                    variant={displayMode === "hebrew" ? "default" : "outline"}
-                    size="sm"
+                {/* Display Mode Controls - Segmented Control */}
+                <div className="relative inline-grid grid-cols-3 rounded-full border shadow-sm bg-gray-100 overflow-hidden">
+                  {/* Sliding highlight */}
+                  {(() => {
+                    const index = displayMode === "hebrew" ? 0 : displayMode === "bilingual" ? 1 : 2;
+                    return (
+                      <motion.div
+                        aria-hidden
+                        className="absolute inset-y-0 w-1/3 bg-blue-500 rounded-full z-0"
+                        animate={{ left: `${index * 33.3333}%` }}
+                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                      />
+                    );
+                  })()}
+
+                  {/* Hebrew */}
+                  <button
+                    type="button"
                     onClick={() => setDisplayMode("hebrew")}
+                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                      displayMode === "hebrew"
+                        ? "text-white transform scale-105"
+                        : "text-gray-600 hover:bg-gray-200"
+                    }`}
                   >
                     Hebrew
-                  </Button>
-                  <Button
-                    variant={displayMode === "english" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDisplayMode("english")}
-                  >
-                    English
-                  </Button>
-                  <Button
-                    variant={displayMode === "bilingual" ? "default" : "outline"}
-                    size="sm"
+                  </button>
+
+                  {/* Both */}
+                  <button
+                    type="button"
                     onClick={() => setDisplayMode("bilingual")}
+                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                      displayMode === "bilingual"
+                        ? "text-white transform scale-105"
+                        : "text-gray-600 hover:bg-gray-200"
+                    }`}
                   >
                     Both
-                  </Button>
+                  </button>
+
+                  {/* English */}
+                  <button
+                    type="button"
+                    onClick={() => setDisplayMode("english")}
+                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                      displayMode === "english"
+                        ? "text-white transform scale-105"
+                        : "text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    English
+                  </button>
                 </div>
                 {/* Feature 2: Compare Versions */}
                 <Button
@@ -950,7 +950,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
           {/* Main Text Area */}
           <div className="flex-1 overflow-auto">
             {/* Standard Text View */}
-            <div className="max-w-4xl mx-auto p-6">
+            <div className="max-w-5xl mx-auto p-6">
                 {loading ? (
                   <div className="flex items-center justify-center h-64">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -965,7 +965,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                     {verseData.map((verse) => (
                       <motion.div
                         key={verse.verseNumber}
-                        className="group cursor-pointer transition-all duration-200"
+                        className="group cursor-pointer transition-all duration-200 relative"
                         onClick={() => {
                           setSelectedCardId(verse.verseNumber)
                           setSelectedSegment(verse.verseNumber)
@@ -973,24 +973,35 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                         }}
                         whileHover={{ scale: 1.01 }}
                       >
+                        {/* Add Note Button - now outside the card, top-right */}
+                        {/* {annotationMode && ( */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="absolute top-2 -right-24 z-10"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleAddAnnotation(verse.verseNumber);
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Note
+                          </Button>
+                        {/* )} */}
                         <div 
                           data-paragraph-id={verse.verseNumber}
                           className={`mb-4 shadow-md rounded-xl p-4 border-2 transition-all duration-200 relative ${
                             selectedCardId === verse.verseNumber
-                              ? 'bg-blue-100 border-blue-500' // Selected state
-                              : 'bg-white border-transparent hover:bg-gray-100 hover:border-blue-200' // Default and hover states
+                              ? 'bg-blue-100 border-blue-500'
+                              : 'bg-white border-transparent hover:bg-gray-100 hover:border-blue-200'
                           }`}
                         >
-                          {/* Verse Number - Outside Right Side */}
-                          <div className="absolute -right-8 top-1/2 transform -translate-y-1/2">
-                            <span className="font-bold text-gray-700 text-lg bg-white px-2 py-1 rounded shadow-sm">
-                              {verse.verseNumber}
-                            </span>
-                          </div>
-                          
-                          <CardContent className="p-0">
+                          {/* Verse Number - Upper Left Inside Card */}
+                          <span className="absolute top-2 -left-8 text-sm font-bold rounded px-2 py-1 bg-blue-500 text-white z-10">
+                            {verse.verseNumber}
+                          </span>
+                          <CardContent className="p-0 mt-6">
                             <div className="space-y-4">
-                              
                               {/* Hebrew Text */}
                               {(displayMode === "hebrew" || displayMode === "bilingual") && (
                                 <div 
@@ -999,7 +1010,6 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                                   dangerouslySetInnerHTML={{ __html: verse.hebrewHtml }}
                                 />
                               )}
-                              
                               {/* English Text */}
                               {(displayMode === "english" || displayMode === "bilingual") && (
                                 <div 
@@ -1009,31 +1019,14 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                                 />
                               )}
                             </div>
-
                             {/* AI Insights - Feature 5 */}
                             {aiLayering && (
                               <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mt-4">
                                 <p className="text-sm text-blue-800">
-                                  <strong>AI Insight ({aiMode}):</strong>{" "}
+                                  <strong>AI Insight ({aiMode}):</strong>{' '}
                                   AI commentary would appear here for verse {verse.verseNumber}.
                                 </p>
                               </div>
-                            )}
-
-                            {/* Add Annotation Button - Feature 9 */}
-                            {annotationMode && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-transparent"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleAddAnnotation(verse.verseNumber)
-                                }}
-                              >
-                                <Plus className="w-3 h-3 mr-1" />
-                                Note
-                              </Button>
                             )}
                           </CardContent>
                         </div>
@@ -1057,7 +1050,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
             >
               <div className="border-b border-slate-200 p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-900">Context Tools</h3>
+                  <h3 className="font-semibold text-slate-900 text-lg">Context Tools</h3>
                   <Button variant="ghost" size="sm" onClick={() => setRightSidebarOpen(false)}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
@@ -1065,50 +1058,110 @@ export default function ChapterPage({ params }: ChapterPageProps) {
 
 
                 {/* Tab Navigation */}
-                <Tabs defaultValue="connections" className="w-full">
-                  <TabsList className="w-full flex flex-row gap-2 mb-4 bg-gray-50 p-1 rounded-lg overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                    <TabsTrigger value="connections" onClick={() => setActiveRightTab("connections")}
-                      className="flex flex-col items-center justify-center p-2"
+                <Tabs value={activeRightTab} onValueChange={setActiveRightTab} className="w-full p-0">
+                  {/* Square tab list that stacks on small screens */}
+                  <TabsList className="grid grid-cols-1 sm:grid-cols-6 gap-1 relative mb-4 rounded-md border bg-white/40 backdrop-blur-md shadow-sm overflow-hidden">
+                    {/* Sliding indicator and animated gradient border */}
+                    {(() => {
+                      const order = ["connections","sugyaMap","psakLineage","layeredAI","annotations","wordMaps"] as const;
+                      const index = Math.max(0, order.indexOf(activeRightTab as typeof order[number]));
+                      const left = index * (100 / 6);
+                      const top = index * (100 / 6);
+                      return (
+                        <>
+                          {/* Horizontal indicator for >= sm */}
+                          <motion.div
+                            aria-hidden
+                            className="hidden sm:block absolute bottom-0 h-0.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500 rounded-md"
+                            style={{ width: `calc(100% / 6)` }}
+                            animate={{ left: `${left}%` }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                          />
+                          {/* Vertical indicator for < sm */}
+                          <motion.div
+                            aria-hidden
+                            className="block sm:hidden absolute left-0 w-0.5 bg-gradient-to-b from-blue-500 via-indigo-500 to-blue-500 rounded-md"
+                            style={{ height: `calc(100% / 6)` }}
+                            animate={{ top: `${top}%` }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                          />
+                          {/* Gradient border + glass background overlay aligned to active cell */}
+                          <motion.div
+                            aria-hidden
+                            className="pointer-events-none absolute hidden sm:block p-[1px] rounded-md bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500"
+                            style={{ width: `calc(100% / 6)`, height: "100%" }}
+                            animate={{ left: `${left}%` }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                          >
+                            <div className="w-full h-full rounded-md bg-white/50 backdrop-blur-sm" />
+                          </motion.div>
+                          <motion.div
+                            aria-hidden
+                            className="pointer-events-none absolute sm:hidden p-[1px] rounded-md bg-gradient-to-b from-blue-500 via-indigo-500 to-blue-500"
+                            style={{ height: `calc(100% / 6)`, width: "100%" }}
+                            animate={{ top: `${top}%` }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                          >
+                            <div className="w-full h-full rounded-md bg-white/50 backdrop-blur-sm" />
+                          </motion.div>
+                        </>
+                      );
+                    })()}
+
+                    <TabsTrigger value="connections"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "connections" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Connections</span>
                       <span title="Connections">
                         <Network className="w-5 h-5" />
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="sugyaMap" onClick={() => setActiveRightTab("sugyaMap")}
-                      className="flex flex-col items-center justify-center p-2"
+                    <TabsTrigger value="sugyaMap"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "sugyaMap" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Sugya Map</span>
                       <span title="Sugya Map">
                         <Map className="w-5 h-5" />
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="psakLineage" onClick={() => setActiveRightTab("psakLineage")}
-                      className="flex flex-col items-center justify-center p-2"
+                    <TabsTrigger value="psakLineage"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "psakLineage" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Psak Lineage</span>
                       <span title="Psak Lineage">
                         <GitBranch className="w-5 h-5" />
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="layeredAI" onClick={() => setActiveRightTab("layeredAI")}
-                      className="flex flex-col items-center justify-center p-2"
+                    <TabsTrigger value="layeredAI"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "layeredAI" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Layered AI View</span>
                       <span title="Layered AI View">
                         <Brain className="w-5 h-5" />
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="annotations" onClick={() => setActiveRightTab("annotations")}
-                      className="flex flex-col items-center justify-center p-2"
+                    <TabsTrigger value="annotations"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "annotations" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Annotations</span>
                       <span title="Annotations">
                         <MessageSquare className="w-5 h-5" />
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="wordMaps" onClick={() => setActiveRightTab("wordMaps")}
-                      className="flex flex-col items-center justify-center p-2"
+                    <TabsTrigger value="wordMaps"
+                      className={`relative z-10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ease-out flex items-center justify-center cursor-pointer border ${
+                        activeRightTab === "wordMaps" ? "text-blue-900 font-semibold scale-105 bg-white/80 border-blue-500 ring-1 ring-blue-400/60 shadow-[0_6px_18px_rgba(37,99,235,0.25)] backdrop-blur" : "text-slate-600 hover:text-slate-800 hover:bg-slate-100/70 hover:-translate-y-0.5 border-transparent"
+                      }`}
                     >
                       <span className="sr-only">Word Maps</span>
                       <span title="Word Maps">
@@ -1119,7 +1172,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
 
                   {/* Tab Content */}
                   <TabsContent value="connections" className="mt-0">
-                    <div className="p-4">
+                    <motion.div key="connections-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       {selectedCardId !== null && (
                         <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                           <p className="text-sm text-blue-800 font-medium">
@@ -1147,11 +1200,11 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                           Select a card to enable connections
                         </p>
                       )}
-                    </div>
+                    </motion.div>
                   </TabsContent>
 
                   <TabsContent value="sugyaMap" className="mt-0">
-                    <div className="p-4">
+                    <motion.div key="sugyaMap-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       {/* Auto-generated flow summary */}
                       <p className="text-sm text-gray-600 mb-4">
                         {/* TODO: Replace with actual summary generation logic */}
@@ -1159,17 +1212,17 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                       </p>
                       {/* Dialectic Logic Tree */}
                       <SugyaLogicTree onNodeClick={handleSugyaNodeClick} />
-                    </div>
+                    </motion.div>
                   </TabsContent>
 
                   <TabsContent value="psakLineage" className="mt-0">
-                    <div className="p-4">
+                    <motion.div key="psakLineage-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       <PsakLineageTimeline onNodeClick={handlePsakNodeClick} />
-                    </div>
+                    </motion.div>
                   </TabsContent>
 
                   <TabsContent value="layeredAI" className="mt-0">
-                    <div className="p-4 space-y-4">
+                    <motion.div key="layeredAI-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4 space-y-4">
                       <div className="flex flex-col gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-700 mb-1">Base Commentary Layer</label>
@@ -1196,21 +1249,21 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                           </select>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   </TabsContent>
 
                   <TabsContent value="annotations" className="mt-0">
-                    <div className="p-4">
+                    <motion.div key="annotations-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       <div className="flex items-center mb-4">
                         <Switch checked={aiLayeredEnabled} onCheckedChange={setAiLayeredEnabled} id="ai-layered-toggle" />
                         <label htmlFor="ai-layered-toggle" className="ml-2 text-sm font-medium">Layered AI View</label>
                       </div>
                       <p className="text-sm text-gray-600">View and manage annotations for this text.</p>
-                    </div>
+                    </motion.div>
                   </TabsContent>
 
                   <TabsContent value="wordMaps" className="mt-0">
-                    <div className="p-4">
+                    <motion.div key="wordMaps-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       <div className="mb-4">
                         <label htmlFor="word-search" className="block text-xs font-medium text-slate-700 mb-1">Search for a word</label>
                         <Input
@@ -1225,7 +1278,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                         searchTerm={lexicalSearchTerm}
                         onNodeClick={handleLexicalNodeClick}
                       />
-                    </div>
+                    </motion.div>
                   </TabsContent>
                 </Tabs>
 
@@ -1302,7 +1355,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
               className="bg-white rounded-lg max-w-6xl max-h-[90vh] overflow-hidden w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <LexicalHypergraph />
+              <LexicalHypergraph searchTerm={lexicalSearchTerm} onNodeClick={handleLexicalNodeClick} />
             </motion.div>
           </motion.div>
         )}
