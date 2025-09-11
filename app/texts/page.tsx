@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useLibraryData, type SefariaItem } from "@/components/data-provider";
 import { useLanguage } from "@/components/language-context";
+import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TextsSidebar } from "@/components/texts-sidebar";
 import { PageHeader } from "@/components/page-header";
@@ -111,10 +112,18 @@ const categoryColorMap: Record<
 };
 
 export default function TextsPage() {
+  return (
+    <ContentLanguageProvider>
+      <TextsPageInner />
+    </ContentLanguageProvider>
+  );
+}
+
+function TextsPageInner() {
   const { data, status, error } = useLibraryData();
   const [searchQuery, setSearchQuery] = useState("");
-  const { language } = useLanguage();
-  const isHebrew = language === "he";
+  const { effectiveLanguage } = useOptionalContentLanguage();
+  const isHebrew = effectiveLanguage === "he";
 
   const filtered = useMemo(() => {
     return data.filter((i) =>

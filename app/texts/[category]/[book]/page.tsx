@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarContainer } from "@/components/sidebar-container";
 import { PageHeader } from "@/components/page-header";
 import { useLanguage } from "@/components/language-context";
+import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context";
 import {
   Select,
   SelectContent,
@@ -64,8 +65,16 @@ interface BookData {
 }
 
 export default function BookPage() {
+  return (
+    <ContentLanguageProvider>
+      <BookPageInner />
+    </ContentLanguageProvider>
+  );
+}
+
+function BookPageInner() {
   const params = useParams<{ category: string; book: string }>();
-  const { language } = useLanguage();
+  const { effectiveLanguage } = useOptionalContentLanguage();
   const [bookData, setBookData] = useState<BookData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,15 +182,12 @@ export default function BookPage() {
       <div className="max-w-[84rem] mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Main Content */}
-          <div 
-            className="lg:col-span-2"
-            dir={language === "he" ? "rtl" : "ltr"}
-          >
+          <div className="lg:col-span-2" dir={effectiveLanguage === "he" ? "rtl" : "ltr"}>
             {/* Header */}
             <div className="mb-6">
 
               <PageHeader 
-                title={language === "he" ? (bookData?.heTitle || bookData?.title) : (bookData?.title ||
+                title={effectiveLanguage === "he" ? (bookData?.heTitle || bookData?.title) : (bookData?.title ||
                   params.book
                     .replace(/-/g, " ")
                     .replace(/\b\w/g, (l) => l.toUpperCase()))}
@@ -299,7 +305,7 @@ export default function BookPage() {
                             return (
                               <div key={index} className="space-y-1">
                                 <h3 className="text-xl font-medium text-gray-900 font-times">
-                                  {language === "he" ? portion.heTitle : portion.title}
+                                  {effectiveLanguage === "he" ? portion.heTitle : portion.title}
                                 </h3>
                                 <div className="flex flex-wrap gap-1">
                                   <Link

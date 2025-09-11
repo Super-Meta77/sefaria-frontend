@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import { useLanguage } from "./language-context";
-import { LanguageSwitchButton } from "./language-switch-button";
+import { useOptionalContentLanguage } from "./content-language-context";
+import { ContentLanguageSwitcher } from "./content-language-switcher";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps {
@@ -12,9 +13,10 @@ interface PageHeaderProps {
   movable?: boolean;
 }
 
-export function PageHeader({ title, hebrewTitle, className, movable = true }: PageHeaderProps) {
+function PageHeaderInner({ title, hebrewTitle, className, movable = true }: PageHeaderProps) {
   const { language } = useLanguage();
-  const isHebrew = language === "he";
+  const { effectiveLanguage, isSwitcherVisible } = useOptionalContentLanguage();
+  const isHebrew = effectiveLanguage === "he";
   const displayTitle = isHebrew ? (hebrewTitle || title) : title;
 
   // When movable is false (like on /texts page), positions stay fixed
@@ -27,7 +29,7 @@ export function PageHeader({ title, hebrewTitle, className, movable = true }: Pa
         <h1 className="text-3xl font-bold text-slate-900 font-times">
           {displayTitle}
         </h1>
-        <LanguageSwitchButton movable={false} />
+        {isSwitcherVisible && <ContentLanguageSwitcher />}
       </div>
     );
   }
@@ -58,7 +60,7 @@ export function PageHeader({ title, hebrewTitle, className, movable = true }: Pa
         {displayTitle}
       </motion.h1>
 
-      {/* Language Switch Button - positioned based on language */}
+      {/* Content Language Switcher - positioned based on content language */}
       <motion.div
         initial={false}
         animate={{
@@ -68,8 +70,12 @@ export function PageHeader({ title, hebrewTitle, className, movable = true }: Pa
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className="absolute top-0"
       >
-        <LanguageSwitchButton movable={true} />
+        {isSwitcherVisible && <ContentLanguageSwitcher />}
       </motion.div>
     </div>
   );
+}
+
+export function PageHeader(props: PageHeaderProps) {
+  return <PageHeaderInner {...props} />;
 }

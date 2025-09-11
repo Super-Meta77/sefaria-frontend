@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { BookOpen, Search, Settings, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Bookmark, Share, TimerIcon as Timeline, Hash, Plus, TreePine, BookMarked, X, Filter, Star, Calendar, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -308,6 +309,14 @@ interface ChapterPageProps {
 }
 
 export default function ChapterPage({ params }: ChapterPageProps) {
+  return (
+    <ContentLanguageProvider>
+      <ChapterPageInner params={params} />
+    </ContentLanguageProvider>
+  )
+}
+
+function ChapterPageInner({ params }: ChapterPageProps) {
   const { category, book, chapter } = params
 
   // State for verse data
@@ -315,6 +324,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<"hebrew" | "english" | "bilingual">("bilingual");
+  const { effectiveLanguage } = useOptionalContentLanguage();
 
   // Fetch verse data from API
   useEffect(() => {
@@ -747,6 +757,33 @@ export default function ChapterPage({ params }: ChapterPageProps) {
     setMainView("source");
   };
 
+  // Calendars API state
+  const [calendarItems, setCalendarItems] = useState<any[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState<boolean>(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarDate, setCalendarDate] = useState<string>(safeLearning.date);
+  const [calendarHebrewDate, setCalendarHebrewDate] = useState<string>(safeLearning.hebrewDate);
+
+  useEffect(() => {
+    const fetchCalendars = async () => {
+      try {
+        setCalendarLoading(true);
+        setCalendarError(null);
+        const res = await fetch("https://www.sefaria.org/api/calendars", { cache: "no-store" });
+        if (!res.ok) throw new Error(`Calendars request failed: ${res.status}`);
+        const data = await res.json();
+        setCalendarItems(Array.isArray(data?.calendar_items) ? data.calendar_items : []);
+        if (typeof data?.date === "string") setCalendarDate(data.date);
+        if (typeof data?.hebDate === "string") setCalendarHebrewDate(data.hebDate);
+      } catch (e: any) {
+        setCalendarError(e?.message || "Failed to load calendars");
+      } finally {
+        setCalendarLoading(false);
+      }
+    };
+    fetchCalendars();
+  }, []);
+
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
       {/* Top sub-header under global header to show breadcrumb and controls */}
@@ -783,23 +820,43 @@ export default function ChapterPage({ params }: ChapterPageProps) {
                   <CardContent className="space-y-2">
                     <div className="text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-600">{safeLearning.date}</span>
-                        <span className="font-hebrew text-blue-800">{safeLearning.hebrewDate}</span>
+                        <span className="text-slate-600">{calendarDate}</span>
+                        <span className="font-hebrew text-blue-800">{calendarHebrewDate}</span>
                       </div>
+                      {calendarLoading && (
+                        <div className="text-xs text-slate-500 mt-1">Loading calendars…</div>
+                      )}
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Parasha:</span>
-                        <Badge variant="secondary">{safeLearning.parasha}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Daf Yomi:</span>
-                        <Badge variant="secondary">{safeLearning.dafYomi}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Mishnah:</span>
-                        <Badge variant="secondary">{safeLearning.mishnahYomi}</Badge>
-                      </div>
+                      {(() => {
+                        const findItem = (en: string) => calendarItems.find((i: any) => i?.title?.en === en);
+                        const parashat = findItem("Parashat Hashavua");
+                        const haftarah = findItem("Haftarah");
+                        const dafYomi = findItem("Daf Yomi");
+                        return (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600">Parashat:</span>
+                              <Badge variant="secondary">{parashat?.displayValue?.en || '-'}</Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600">Haftarah:</span>
+                              <Badge variant="secondary">{haftarah?.displayValue?.en || '-'}</Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600">Daf Yomi:</span>
+                              <Badge variant="secondary">{dafYomi?.displayValue?.en || '-'}</Badge>
+                            </div>
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-xs text-slate-600">&nbsp;</span>
+                              <Link href="/calendars" className="text-xs text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
+                            </div>
+                          </>
+                        );
+                      })()}
+                      {calendarError && (
+                        <div className="text-xs text-red-600">{calendarError}</div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

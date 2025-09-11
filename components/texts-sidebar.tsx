@@ -2,10 +2,42 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function TextsSidebar() {
+  // Calendars API state (shared logic with Today's Learning)
+  const [calendarItems, setCalendarItems] = useState<any[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState<boolean>(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCalendars = async () => {
+      try {
+        setCalendarLoading(true);
+        setCalendarError(null);
+        const res = await fetch("https://www.sefaria.org/api/calendars", { cache: "no-store" });
+        if (!res.ok) throw new Error(`Calendars request failed: ${res.status}`);
+        const data = await res.json();
+        setCalendarItems(Array.isArray(data?.calendar_items) ? data.calendar_items : []);
+      } catch (e: any) {
+        setCalendarError(e?.message || "Failed to load calendars");
+      } finally {
+        setCalendarLoading(false);
+      }
+    };
+    fetchCalendars();
+  }, []);
+
+  const findItem = (en: string) => calendarItems.find((i: any) => i?.title?.en === en);
+  const parashat = findItem("Parashat Hashavua");
+  const haftarah = findItem("Haftarah");
+  const dafYomi = findItem("Daf Yomi");
+  const parashatName = parashat?.displayValue?.en || (calendarLoading ? "Loading..." : "-");
+  const parashatRef = parashat?.ref || "";
+  const haftarahName = haftarah?.displayValue?.en || (calendarLoading ? "Loading..." : "-");
+  const dafName = dafYomi?.displayValue?.en || (calendarLoading ? "Loading..." : "-");
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -91,9 +123,9 @@ export function TextsSidebar() {
                 className="navSidebarIcon size-[20px] inline-block"
                 alt="book icon"
               />{" "} &nbsp; &nbsp;
-              <span className="font-medium">Re'eh</span>
+              <span className="font-medium">{parashatName}</span>
               <span className="text-gray-500 ml-2">
-                Deuteronomy 11:26-16:17
+                {parashatRef}
               </span>
             </div>
           </div>
@@ -106,7 +138,7 @@ export function TextsSidebar() {
                 className="navSidebarIcon size-[20px] inline-block"
                 alt="book icon"
               />{" "} &nbsp; &nbsp;
-              <span className="font-medium">I Samuel 20:18-42</span>
+              <span className="font-medium">{haftarahName}</span>
             </div>
           </div>
 
@@ -118,7 +150,7 @@ export function TextsSidebar() {
                 className="navSidebarIcon size-[20px] inline-block"
                 alt="book  icon"
               />{" "} &nbsp; &nbsp;
-              <span className="font-medium">Avodah Zarah 55</span>
+              <span className="font-medium">{dafName}</span>
             </div>
           </div>
 

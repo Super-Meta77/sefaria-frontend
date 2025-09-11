@@ -17,6 +17,7 @@ import { SidebarContainer } from "@/components/sidebar-container";
 import { PageHeader } from "@/components/page-header";
 import { useLocalizedContent } from "@/hooks/use-localized-content";
 import { useLanguage } from "@/components/language-context";
+import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -28,9 +29,17 @@ const itemVariants = {
 };
 
 export default function CategoryPage() {
+  return (
+    <ContentLanguageProvider>
+      <CategoryPageInner />
+    </ContentLanguageProvider>
+  );
+}
+
+function CategoryPageInner() {
   const params = useParams<{ category: string }>();
   const { data, status, error } = useLibraryData();
-  const { language } = useLanguage();
+  const { effectiveLanguage } = useOptionalContentLanguage();
 
   const categoryItem = useMemo(() => {
     const slug = Array.isArray(params.category)
@@ -105,10 +114,7 @@ export default function CategoryPage() {
         {!loading && !error && categoryItem && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main Content */}
-            <div
-              className="lg:col-span-2"
-              dir={language === "he" ? "rtl" : "ltr"}
-            >
+            <div className="lg:col-span-2" dir={effectiveLanguage === "he" ? "rtl" : "ltr"}>
               <PageHeader
                 title={(categoryItem.category || "").toUpperCase()}
                 hebrewTitle={categoryItem.heCategory?.toUpperCase()}
@@ -153,7 +159,7 @@ export default function CategoryPage() {
                         activeTabContent.heShortDesc) && (
                         <motion.div variants={itemVariants}>
                           <p className="text-lg italic text-gray-600 mb-8">
-                            {language === "he" && activeTabContent.heShortDesc
+                            {effectiveLanguage === "he" && activeTabContent.heShortDesc
                               ? activeTabContent.heShortDesc
                               : activeTabContent.enShortDesc}
                           </p>
@@ -177,7 +183,7 @@ export default function CategoryPage() {
                               {/* Section header */}
                               <div className="mb-6 border-b border-gray-200 pb-4">
                                 <h2 className="text-m font-medium text-gray-600 uppercase tracking-wider mb-4">
-                                  {language === "en" ? title : entry.heTitle}
+                                  {effectiveLanguage === "en" ? title : entry.heTitle}
                                 </h2>
                                 {desc && (
                                   <p className="text-sm text-gray-500 italic mb-6">
@@ -281,7 +287,7 @@ export default function CategoryPage() {
                                       >
                                         <CardHeader className="pb-2">
                                           <CardTitle className="text-xl font-medium">
-                                            {language === "en"
+                                            {effectiveLanguage === "en"
                                               ? childTitle
                                               : child.heTitle}
                                           </CardTitle>
@@ -289,7 +295,7 @@ export default function CategoryPage() {
                                         {childDesc && (
                                           <CardContent className="pt-0">
                                             <CardDescription className="text-m text-gray-600 leading-relaxed">
-                                              {language === "en"
+                                              {effectiveLanguage === "en"
                                                 ? childDesc
                                                 : child.heShortDesc}
                                             </CardDescription>
