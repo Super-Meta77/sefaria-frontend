@@ -72,6 +72,16 @@
   direction: rtl;
 }
 
+/* Center Pane typography */
+.center-pane {
+  font-family: "Times New Roman", Times, serif;
+}
+
+/* Ensure Hebrew elements inside the center pane also use Times */
+.center-pane .font-hebrew {
+  font-family: "Times New Roman", Times, serif;
+}
+
 /* Custom scrollbar */
 .scrollbar-thin {
   scrollbar-width: thin;

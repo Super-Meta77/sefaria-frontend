@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Heart } from "lucide-react";
 import { useLibraryData } from "@/components/data-provider";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SidebarContainer } from "@/components/sidebar-container";
@@ -40,6 +41,7 @@ function CategoryPageInner() {
   const params = useParams<{ category: string }>();
   const { data, status, error } = useLibraryData();
   const { effectiveLanguage } = useOptionalContentLanguage();
+  const { language } = useLanguage();
 
   const categoryItem = useMemo(() => {
     const slug = Array.isArray(params.category)
@@ -209,7 +211,7 @@ function CategoryPageInner() {
                                         <CardHeader className="pb-2">
                                           <CardTitle className="text-lg">
                                             <Link
-                                              href={`/texts/${categoryItem.category.toLowerCase()}/${childTitle
+                                              href={`/${childTitle
                                                 .toLowerCase()
                                                 .replace(/\s+/g, "-")}`}
                                               className="text-blue-600 hover:text-blue-800 font-medium transition-colors group-hover:text-blue-800"
@@ -280,7 +282,7 @@ function CategoryPageInner() {
                                       className="hover:shadow-md transition-shadow cursor-pointer group"
                                     >
                                       <Link
-                                        href={`/texts/${categoryItem.category.toLowerCase()}/${childTitle
+                                        href={`/${childTitle
                                           .toLowerCase()
                                           .replace(/\s+/g, "-")}`}
                                         className="text-blue-600 hover:text-blue-800 font-medium transition-colors group-hover:text-blue-800"
@@ -463,7 +465,10 @@ function CategoryPageInner() {
                     href="#"
                     className="inline-flex items-center justify-center w-full bg-blue-900 hover:bg-blue-800 text-white h-10 rounded-md text-sm"
                   >
-                    ♡ Make a Donation
+                  <span className="mr-2">
+                    <Heart className="w-4 h-4" />
+                  </span>
+                  Make a Donation
                   </a>
                 </div>
               </SidebarContainer>

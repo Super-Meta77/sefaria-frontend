@@ -163,36 +163,30 @@ export default function CalendarDrawer({ open, onClose, todaysLearning }: Calend
               <div className="p-4 bg-blue-50 border-b border-blue-200">
                 <Card className="border-blue-200">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-blue-900 flex items-center">
+                    <CardTitle className="text-lg text-blue-900 flex items-center">
                       <Star className="w-4 h-4 mr-2" />
-                      {selected ? "Selected Day" : "Today's Learning"}
+                      Selected Day ({apiDate})
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-600">{apiDate}</span>
-                        <span className="font-hebrew text-blue-800">{apiHebDate}</span>
-                      </div>
-                    </div>
+                  <CardContent className="space-y-2 pt-3">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Parashat:</span>
+                        <span className="text-md text-slate-600">Parashat:</span>
                         <Badge variant="secondary">{parashat?.displayValue?.en || '-'}</Badge>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Haftarah:</span>
+                        <span className="text-md text-slate-600">Haftarah:</span>
                         <Badge variant="secondary">{haftarah?.displayValue?.en || '-'}</Badge>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Daf Yomi:</span>
+                        <span className="text-md text-slate-600">Daf Yomi:</span>
                         <Badge variant="secondary">{dafYomi?.displayValue?.en || '-'}</Badge>
                       </div>
                       {calendarError && (
-                        <div className="text-xs text-red-600">{calendarError}</div>
+                        <div className="text-md text-red-600">{calendarError}</div>
                       )}
                     </div>
-                    <div className="pt-1 text-right">
+                    <div className="pt-2 text-left">
                       {(() => {
                         const d = selected ?? today
                         const y = d.getFullYear()
@@ -200,7 +194,7 @@ export default function CalendarDrawer({ open, onClose, todaysLearning }: Calend
                         const day = pad2(d.getDate())
                         const href = `/calendars?year=${y}&month=${m}&day=${day}`
                         return (
-                          <Link href={href} className="text-xs text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
+                          <Link href={href} className="text-sm text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
                         )
                       })()}
                     </div>

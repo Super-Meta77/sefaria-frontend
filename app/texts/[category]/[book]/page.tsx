@@ -275,7 +275,7 @@ function BookPageInner() {
                             {chapters.map((chapter) => (
                               <Link
                                 key={chapter}
-                                href={`/texts/${params.category}/${params.book}/${chapter}`}
+                                href={`/${params.book}.${chapter}`}
                                 className="w-12 h-12 border border-gray-300 rounded flex items-center justify-center text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 aria-label={`${bookTitle} chapter ${chapter}`}
                                 role="listitem"

@@ -102,7 +102,7 @@ export default function SiteHeader({ onCalendarClick }: { onCalendarClick?: () =
                         <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={getTranslation(language, "calendar") || "Calendar"}
+                            aria-label={"Calendar"}
                             onClick={onCalendarClick}
                             className="hover:bg-blue-50 focus:bg-blue-100"
                         >
@@ -114,11 +114,11 @@ export default function SiteHeader({ onCalendarClick }: { onCalendarClick?: () =
                             </Link>
                         </Button>
                         <GlobalLanguageSwitcher />
-                        <Button variant="ghost" size="sm">
-                            {getTranslation(language, "login")}
+                        <Button asChild variant="ghost" size="sm">
+                            <Link href="/login">{getTranslation(language, "login")}</Link>
                         </Button>
-                        <Button variant="ghost" size="sm">
-                            {getTranslation(language, "signup")}
+                        <Button asChild variant="ghost" size="sm">
+                            <Link href="/signup">{getTranslation(language, "signup")}</Link>
                         </Button>
                         <Button variant="ghost" size="icon" className="md:hidden">
                             <Menu className="w-5 h-5" />

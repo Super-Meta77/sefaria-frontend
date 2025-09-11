@@ -915,7 +915,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         </AnimatePresence>
 
         {/* Center Panel - Primary Text */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 flex flex-col bg-white center-pane">
           {/* Text Header */}
           <div className="border-b border-slate-200 p-4">
             <div className="flex items-center justify-between">
@@ -931,7 +931,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-6">
                 {/* Display Mode Controls - Segmented Control */}
                 <div className="relative inline-grid grid-cols-3 rounded-full border shadow-sm bg-gray-100 overflow-hidden">
                   {/* Sliding highlight */}
@@ -951,7 +951,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                   <button
                     type="button"
                     onClick={() => setDisplayMode("hebrew")}
-                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                    className={`relative z-10 px-4 py-1.5 text-md font-bold transition-all duration-300 ease-in-out focus:outline-none ${
                       displayMode === "hebrew"
                         ? "text-white transform scale-105"
                         : "text-gray-600 hover:bg-gray-200"
@@ -964,7 +964,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                   <button
                     type="button"
                     onClick={() => setDisplayMode("bilingual")}
-                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                    className={`relative z-10 px-4 py-1.5 text-md font-bold transition-all duration-300 ease-in-out focus:outline-none ${
                       displayMode === "bilingual"
                         ? "text-white transform scale-105"
                         : "text-gray-600 hover:bg-gray-200"
@@ -977,7 +977,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                   <button
                     type="button"
                     onClick={() => setDisplayMode("english")}
-                    className={`relative z-10 px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-in-out focus:outline-none ${
+                    className={`relative z-10 px-4 py-1.5 text-md font-bold transition-all duration-300 ease-in-out focus:outline-none ${
                       displayMode === "english"
                         ? "text-white transform scale-105"
                         : "text-gray-600 hover:bg-gray-200"
@@ -988,6 +988,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                 </div>
                 {/* Feature 2: Compare Versions */}
                 <Button
+                  className="text-md font-bold"
                   variant="outline"
                   size="sm"
                   onClick={() => setTopologyModalOpen(true)}
@@ -1042,7 +1043,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         {/* )} */}
                         <div 
                           data-paragraph-id={verse.verseNumber}
-                          className={`mb-4 shadow-md rounded-xl p-4 border-2 transition-all duration-200 relative ${
+                          className={`mb-4 shadow-md rounded-xl p-4 pt-0 border-2 transition-all duration-200 relative ${
                             selectedCardId === verse.verseNumber
                               ? 'bg-blue-100 border-blue-500'
                               : 'bg-white border-transparent hover:bg-gray-100 hover:border-blue-200'
@@ -1057,7 +1058,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                               {/* Hebrew Text */}
                               {(displayMode === "hebrew" || displayMode === "bilingual") && (
                                 <div 
-                                  className="text-right font-hebrew text-md leading-relaxed text-slate-800" 
+                                  className="text-right font-hebrew text-xl leading-relaxed text-slate-800" 
                                   dir="rtl"
                                   dangerouslySetInnerHTML={{ __html: verse.hebrewHtml }}
                                 />
@@ -1065,7 +1066,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                               {/* English Text */}
                               {(displayMode === "english" || displayMode === "bilingual") && (
                                 <div 
-                                  className="text-left text-md leading-relaxed text-slate-700 font-times" 
+                                  className="text-left text-lg leading-relaxed text-slate-700 font-times" 
                                   dir="ltr"
                                   dangerouslySetInnerHTML={{ __html: verse.englishHtml }}
                                 />
