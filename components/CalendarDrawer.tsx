@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Calendar, ChevronLeft, ChevronRight, BookOpen, Clock, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 interface CalendarDrawerProps {
   open: boolean
@@ -51,15 +53,78 @@ const weeklyReadings = [
 ]
 
 export default function CalendarDrawer({ open, onClose, todaysLearning }: CalendarDrawerProps) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  // Provide fallback if todaysLearning is undefined
-  const safeLearning = todaysLearning || {
-    parasha: "-",
-    dafYomi: "-",
-    mishnahYomi: "-",
-    date: "-",
-    hebrewDate: "-"
-  };
+  const router = useRouter()
+
+  // Calendar view state
+  const today = new Date()
+  const [viewYear, setViewYear] = useState<number>(today.getFullYear())
+  const [viewMonth, setViewMonth] = useState<number>(today.getMonth()) // 0-11
+  const [selected, setSelected] = useState<Date | null>(today)
+
+  // API state
+  const [calendarItems, setCalendarItems] = useState<any[]>([])
+  const [calendarLoading, setCalendarLoading] = useState<boolean>(false)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [apiDate, setApiDate] = useState<string>(todaysLearning?.date || "-")
+  const [apiHebDate, setApiHebDate] = useState<string>(todaysLearning?.hebrewDate || "-")
+
+  const pad2 = (n: number) => String(n).padStart(2, "0")
+  const monthLabel = useMemo(() => new Date(viewYear, viewMonth, 1).toLocaleString(undefined, { month: "long", year: "numeric" }), [viewYear, viewMonth])
+
+  const fetchCalendars = async (d: Date) => {
+    try {
+      setCalendarLoading(true)
+      setCalendarError(null)
+      const y = d.getFullYear()
+      const m = pad2(d.getMonth() + 1)
+      const day = pad2(d.getDate())
+      const res = await fetch(`https://www.sefaria.org/api/calendars?year=${y}&month=${m}&day=${day}`, { cache: "no-store" })
+      if (!res.ok) throw new Error(`Calendars request failed: ${res.status}`)
+      const data = await res.json()
+      setCalendarItems(Array.isArray(data?.calendar_items) ? data.calendar_items : [])
+      if (typeof data?.date === "string") setApiDate(data.date)
+      if (typeof data?.hebDate === "string") setApiHebDate(data.hebDate)
+    } catch (e: any) {
+      setCalendarError(e?.message || "Failed to load calendars")
+      setCalendarItems([])
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (open) {
+      // Default to today on open
+      const base = selected ?? today
+      setViewYear(base.getFullYear())
+      setViewMonth(base.getMonth())
+      fetchCalendars(base)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const onPrevMonth = () => {
+    const d = new Date(viewYear, viewMonth - 1, 1)
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }
+  const onNextMonth = () => {
+    const d = new Date(viewYear, viewMonth + 1, 1)
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }
+
+  const onSelectDate = (dayNum: number) => {
+    const d = new Date(viewYear, viewMonth, dayNum)
+    setSelected(d)
+    fetchCalendars(d)
+  }
+
+  // Mapping to preview labels
+  const findItem = (en: string) => calendarItems.find((i: any) => i?.title?.en === en)
+  const parashat = findItem("Parashat Hashavua")
+  const haftarah = findItem("Haftarah")
+  const dafYomi = findItem("Daf Yomi")
 
   return (
     <AnimatePresence>
@@ -94,150 +159,108 @@ export default function CalendarDrawer({ open, onClose, todaysLearning }: Calend
                 </Button>
               </div>
 
-              {/* Today's Learning Highlight */}
+              {/* Selected Day's Learning Highlight */}
               <div className="p-4 bg-blue-50 border-b border-blue-200">
                 <Card className="border-blue-200">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm text-blue-900 flex items-center">
                       <Star className="w-4 h-4 mr-2" />
-                      Today's Learning
+                      {selected ? "Selected Day" : "Today's Learning"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-600">{safeLearning.date}</span>
-                        <span className="font-hebrew text-blue-800">{safeLearning.hebrewDate}</span>
+                        <span className="text-slate-600">{apiDate}</span>
+                        <span className="font-hebrew text-blue-800">{apiHebDate}</span>
                       </div>
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Parasha:</span>
-                        <Badge variant="secondary">{safeLearning.parasha}</Badge>
+                        <span className="text-xs text-slate-600">Parashat:</span>
+                        <Badge variant="secondary">{parashat?.displayValue?.en || '-'}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">Haftarah:</span>
+                        <Badge variant="secondary">{haftarah?.displayValue?.en || '-'}</Badge>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-600">Daf Yomi:</span>
-                        <Badge variant="secondary">{safeLearning.dafYomi}</Badge>
+                        <Badge variant="secondary">{dafYomi?.displayValue?.en || '-'}</Badge>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Mishnah:</span>
-                        <Badge variant="secondary">{safeLearning.mishnahYomi}</Badge>
-                      </div>
+                      {calendarError && (
+                        <div className="text-xs text-red-600">{calendarError}</div>
+                      )}
+                    </div>
+                    <div className="pt-1 text-right">
+                      {(() => {
+                        const d = selected ?? today
+                        const y = d.getFullYear()
+                        const m = pad2(d.getMonth() + 1)
+                        const day = pad2(d.getDate())
+                        const href = `/calendars?year=${y}&month=${m}&day=${day}`
+                        return (
+                          <Link href={href} className="text-xs text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
+                        )
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Calendar Navigation */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                <Button variant="ghost" size="sm">
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <h4 className="font-medium text-slate-900">November 2024 • Cheshvan 5785</h4>
-                <Button variant="ghost" size="sm">
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+              <div className="p-4 border-b border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <Button variant="ghost" size="sm" onClick={onPrevMonth}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <h4 className="font-medium text-slate-900">{monthLabel}</h4>
+                  <Button variant="ghost" size="sm" onClick={onNextMonth}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+                {/* Month grid */}
+                {(() => {
+                  const firstDay = new Date(viewYear, viewMonth, 1).getDay()
+                  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+                  const cells: Array<{ label: string; day?: number }> = []
+                  for (let i = 0; i < firstDay; i++) cells.push({ label: "" })
+                  for (let d = 1; d <= daysInMonth; d++) cells.push({ label: String(d), day: d })
+                  const sel = selected && selected.getFullYear() === viewYear && selected.getMonth() === viewMonth ? selected.getDate() : -1
+                  return (
+                    <div className="grid grid-cols-7 gap-2 text-sm">
+                      {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((w) => (
+                        <div key={w} className="text-center text-xs text-slate-500">{w}</div>
+                      ))}
+                      {cells.map((c, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          disabled={!c.day}
+                          onClick={() => c.day && onSelectDate(c.day)}
+                          className={`h-9 rounded-md border text-center ${
+                            c.day ? (c.day === sel ? "bg-blue-600 text-white border-blue-600" : "hover:bg-slate-100 border-slate-200") : "border-transparent"
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
 
-              {/* Weekly Readings */}
+              {/* Results area (kept scrollable for long content) */}
               <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4">
-                  <h4 className="font-medium text-slate-900 mb-3">This Week's Readings</h4>
-                  {weeklyReadings.map((reading, index) => (
-                    <Card
-                      key={reading.date}
-                      className={`cursor-pointer transition-all duration-200 ${
-                        selectedDate === reading.date
-                          ? "border-blue-300 bg-blue-50"
-                          : "hover:border-slate-300 hover:shadow-sm"
-                      }`}
-                      onClick={() => setSelectedDate(reading.date)}
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-sm font-medium text-slate-900">{reading.date}</div>
-                          <div className="text-xs font-hebrew text-slate-600">{reading.hebrewDate}</div>
-                        </div>
-
-                        {reading.specialDay && (
-                          <div className="mb-2">
-                            <Badge variant="outline" className="text-xs bg-yellow-50 border-yellow-300 text-yellow-800">
-                              {reading.specialDay}
-                            </Badge>
-                          </div>
-                        )}
-
-                        <div className="space-y-1 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600">📖 Parasha:</span>
-                            <span className="font-medium">{reading.parasha}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600">📜 Haftara:</span>
-                            <span className="font-medium text-xs">{reading.haftara}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600">📚 Daf Yomi:</span>
-                            <span className="font-medium">{reading.dafYomi}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600">📋 Mishnah:</span>
-                            <span className="font-medium">{reading.mishnahYomi}</span>
-                          </div>
-                        </div>
-
-                        {selectedDate === reading.date && (
-                          <div className="mt-3 pt-3 border-t border-blue-200">
-                            <div className="flex space-x-2">
-                              <Button size="sm" variant="outline" className="flex-1 bg-transparent">
-                                <BookOpen className="w-3 h-3 mr-1" />
-                                Study
-                              </Button>
-                              <Button size="sm" variant="outline" className="flex-1 bg-transparent">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Schedule
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* Upcoming Holidays */}
-                <div className="mt-6">
-                  <h4 className="font-medium text-slate-900 mb-3">Upcoming Holidays</h4>
-                  <div className="space-y-2">
-                    <Card className="border-purple-200 bg-purple-50">
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-medium text-purple-900">Chanukah</div>
-                            <div className="text-xs text-purple-700">8 days of celebration</div>
-                          </div>
-                          <Badge variant="outline" className="border-purple-300 text-purple-800">
-                            Dec 25
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-green-200 bg-green-50">
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-medium text-green-900">Tu BiShvat</div>
-                            <div className="text-xs text-green-700">New Year of the Trees</div>
-                          </div>
-                          <Badge variant="outline" className="border-green-300 text-green-800">
-                            Feb 13
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
+                {!calendarLoading && !calendarError && calendarItems.length === 0 && (
+                  <div className="text-sm text-slate-600">No schedule data for this date.</div>
+                )}
+                {calendarLoading && (
+                  <div className="text-sm text-slate-600">Loading schedule…</div>
+                )}
+                {calendarError && (
+                  <div className="text-sm text-red-600">{calendarError}</div>
+                )}
               </ScrollArea>
             </div>
           </motion.div>

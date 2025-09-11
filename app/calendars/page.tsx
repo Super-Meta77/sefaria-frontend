@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { TextsSidebar } from "@/components/texts-sidebar";
+import { useSearchParams } from "next/navigation";
 
 type CalendarItem = {
   title?: { en?: string; he?: string };
@@ -14,6 +15,7 @@ type CalendarItem = {
 };
 
 export default function CalendarsPage() {
+  const params = useSearchParams();
   const [items, setItems] = useState<CalendarItem[]>([]);
   const [date, setDate] = useState<string>("-");
   const [hebDate, setHebDate] = useState<string>("-");
@@ -25,7 +27,11 @@ export default function CalendarsPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch("https://www.sefaria.org/api/calendars", { cache: "no-store" });
+        const y = params.get("year");
+        const m = params.get("month");
+        const d = params.get("day");
+        const qs = y && m && d ? `?year=${y}&month=${m}&day=${d}` : "";
+        const res = await fetch(`https://www.sefaria.org/api/calendars${qs}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`Failed to load calendars: ${res.status}`);
         const data = await res.json();
         setItems(Array.isArray(data?.calendar_items) ? data.calendar_items : []);
@@ -38,7 +44,7 @@ export default function CalendarsPage() {
       }
     };
     run();
-  }, []);
+  }, [params]);
 
   const descriptionByTitle: Record<string, string> = useMemo(() => ({
     "Parashat Hashavua": "The weekly Torah portion, read on Shabbat with traditional aliyot.",

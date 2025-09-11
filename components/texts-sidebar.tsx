@@ -116,17 +116,14 @@ export function TextsSidebar() {
         </h2>
         <div className="space-y-4">
           <div>
-            <p className="text-gray-600 text-sm mb-2">Weekly Torah Portion</p>
+            <p className="text-gray-600 text-sm mb-2">Weekly Torah Portion: {parashatName}</p>
             <div className="flex items-center text-sm text-gray-700 mb-3">
               <img
                 src="/icons/book.svg"
                 className="navSidebarIcon size-[20px] inline-block"
                 alt="book icon"
               />{" "} &nbsp; &nbsp;
-              <span className="font-medium">{parashatName}</span>
-              <span className="text-gray-500 ml-2">
-                {parashatRef}
-              </span>
+              <span className="font-medium">{parashatRef}</span>
             </div>
           </div>
 
@@ -155,7 +152,7 @@ export function TextsSidebar() {
           </div>
 
           <Link
-            href="/learning-schedules"
+            href="/calendars"
             className="text-gray-500 text-sm hover:text-blue-600"
           >
             All Learning Schedules ›

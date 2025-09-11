@@ -812,17 +812,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               <div className="mb-4">
                 <Card className="border-blue-800">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg text-blue-900 flex items-center">
+                    <CardTitle className="text-md text-blue-900 flex items-center">
                       <Star className="w-4 h-4 mr-2" />
-                      Today's Learning
+                      Today's Learning ({calendarDate})
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    <div className="text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-600">{calendarDate}</span>
-                        <span className="font-hebrew text-blue-800">{calendarHebrewDate}</span>
-                      </div>
+                    <div className="text-md">
                       {calendarLoading && (
                         <div className="text-xs text-slate-500 mt-1">Loading calendars…</div>
                       )}
@@ -836,20 +832,19 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         return (
                           <>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600">Parashat:</span>
+                              <span className="text-sm text-slate-600">Parashat:</span>
                               <Badge variant="secondary">{parashat?.displayValue?.en || '-'}</Badge>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600">Haftarah:</span>
+                              <span className="text-sm text-slate-600">Haftarah:</span>
                               <Badge variant="secondary">{haftarah?.displayValue?.en || '-'}</Badge>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600">Daf Yomi:</span>
+                              <span className="text-sm text-slate-600">Daf Yomi:</span>
                               <Badge variant="secondary">{dafYomi?.displayValue?.en || '-'}</Badge>
                             </div>
                             <div className="flex items-center justify-between pt-1">
-                              <span className="text-xs text-slate-600">&nbsp;</span>
-                              <Link href="/calendars" className="text-xs text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
+                              <Link href="/calendars" className="text-sm text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>
                             </div>
                           </>
                         );
