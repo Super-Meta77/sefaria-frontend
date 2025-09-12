@@ -799,14 +799,14 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               transition={{ duration: 0.3 }}
               className="w-80 bg-white border-r border-slate-200 flex flex-col"
             >
-              <div className="p-4 border-slate-200">
-                <div className="flex items-center justify-between">
-                  <h1 className="font-semibold text-slate-900 text-xl">Navigation & Tools</h1>
+              <div className="flex items-center justify-between h-[80px] p-4 border-slate-200">
+                <div className="w-full flex items-center justify-between">
+                  <h1 className="font-semibold text-slate-900 text-2xl">Navigation & Tools</h1>
                   <Button variant="ghost" size="sm" onClick={() => setLeftSidebarOpen(false)}>
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
                 </div>
-                </div>
+              </div>
 
                 
               <div className="mb-4">
@@ -1113,9 +1113,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               transition={{ duration: 0.3 }}
               className="w-96 bg-white border-l border-slate-200 flex flex-col"
             >
-              <div className="border-b border-slate-200 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-900 text-lg">Context Tools</h3>
+              <div className="border-b border-slate-200 pl-4 pr-4">
+                <div className="h-[80px] flex items-center justify-between pt-4 pb-4">
+                  <h1 className="font-semibold text-slate-900 text-2xl">Context Tools</h1>
                   <Button variant="ghost" size="sm" onClick={() => setRightSidebarOpen(false)}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
