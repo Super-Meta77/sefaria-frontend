@@ -2,15 +2,13 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { BookOpen, Search, Settings, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Bookmark, Share, TimerIcon as Timeline, Hash, Plus, TreePine, BookMarked, X, Filter, Star, Calendar, Check } from "lucide-react"
+import { BookOpen, Search, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Hash, Plus, X, Filter, Star, Calendar, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -227,11 +225,6 @@ const manuscriptVersions = {
   }
 }
 
-// Legacy data for backward compatibility
-const sampleManuscriptData = {
-  primary: manuscriptVersions.Vilna,
-  alternate: manuscriptVersions.Munich,
-}
 
 // Text comparison function for computing differences
 const computeTextDifferences = (text1: string, text2: string) => {
@@ -298,6 +291,14 @@ interface VerseData {
   verseNumber: number;
   hebrewHtml: string;
   englishHtml: string;
+  chapterNumber: number;
+}
+
+interface ChapterData {
+  verses: VerseData[];
+  loading: boolean;
+  error: string | null;
+  chapterNumber: number;
 }
 
 interface ChapterPageProps {
@@ -319,54 +320,131 @@ export default function ChapterPage({ params }: ChapterPageProps) {
 function ChapterPageInner({ params }: ChapterPageProps) {
   const { category, book, chapter } = params
 
-  // State for verse data
-  const [verseData, setVerseData] = useState<VerseData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // State for chapter data
+  const [chaptersData, setChaptersData] = useState<{ [key: number]: ChapterData }>({});
   const [displayMode, setDisplayMode] = useState<"hebrew" | "english" | "bilingual">("bilingual");
-  const { effectiveLanguage } = useOptionalContentLanguage();
+  // Refs for intersection observer
+  const topTriggerRef = useRef<HTMLDivElement>(null);
+  const bottomTriggerRef = useRef<HTMLDivElement>(null);
+  
+  // Current chapter number
+  const currentChapter = parseInt(chapter);
 
-  // Fetch verse data from API
-  useEffect(() => {
-    const fetchVerseData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  // Function to fetch a single chapter
+  const fetchChapter = async (chapterNum: number) => {
+    // Skip invalid chapter numbers
+    if (chapterNum <= 0) {
+      return;
+    }
 
-        const response = await fetch(
-          `https://www.sefaria.org/api/v3/texts/${book}.${chapter}?version=hebrew%7CMiqra%20according%20to%20the%20Masorah&version=translation&fill_in_missing_segments=1&return_format=wrap_all_entities`
-        );
+    // Skip if already loading or loaded
+    if (chaptersData[chapterNum]?.loading || chaptersData[chapterNum]?.verses?.length > 0) {
+      return;
+    }
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch verse data: ${response.status}`);
+    try {
+      setChaptersData(prev => ({
+        ...prev,
+        [chapterNum]: {
+          ...prev[chapterNum],
+          loading: true,
+          error: null,
+          chapterNumber: chapterNum,
+          verses: prev[chapterNum]?.verses || []
         }
+      }));
 
-        const data = await response.json();
-        
-        // Extract Hebrew and English verses from the versions
-        const hebrewVerses = data.versions?.find((v: any) => v.language === "he")?.text || [];
-        const englishVerses = data.versions?.find((v: any) => v.language === "en")?.text || [];
-        
-        // Combine Hebrew and English verses with HTML content
-        const combinedVerses: VerseData[] = hebrewVerses.map((hebrewVerse: string, index: number) => ({
-          hebrew: hebrewVerse,
-          english: englishVerses[index] || "",
-          hebrewHtml: hebrewVerse,
-          englishHtml: englishVerses[index] || "",
-          verseNumber: index + 1
-        }));
+      const response = await fetch(
+        `https://www.sefaria.org/api/v3/texts/${book}.${chapterNum}?version=hebrew%7CMiqra%20according%20to%20the%20Masorah&version=translation&fill_in_missing_segments=1&return_format=wrap_all_entities`
+      );
 
-        setVerseData(combinedVerses);
-      } catch (err) {
-        console.error("Error fetching verse data:", err);
-        setError(err instanceof Error ? err.message : "Failed to load verse data");
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch verse data: ${response.status}`);
       }
-    };
 
-    fetchVerseData();
-  }, [book, chapter]);
+      const data = await response.json();
+      
+      // Extract Hebrew and English verses from the versions
+      const hebrewVerses = data.versions?.find((v: any) => v.language === "he")?.text || [];
+      const englishVerses = data.versions?.find((v: any) => v.language === "en")?.text || [];
+      
+      // Combine Hebrew and English verses with HTML content
+      const combinedVerses: VerseData[] = hebrewVerses.map((hebrewVerse: string, index: number) => ({
+        hebrew: hebrewVerse,
+        english: englishVerses[index] || "",
+        hebrewHtml: hebrewVerse,
+        englishHtml: englishVerses[index] || "",
+        verseNumber: index + 1,
+        chapterNumber: chapterNum
+      }));
+
+      setChaptersData(prev => ({
+        ...prev,
+        [chapterNum]: {
+          verses: combinedVerses,
+          loading: false,
+          error: null,
+          chapterNumber: chapterNum
+        }
+      }));
+    } catch (err) {
+      console.error(`Error fetching chapter ${chapterNum}:`, err);
+      setChaptersData(prev => ({
+        ...prev,
+        [chapterNum]: {
+          ...prev[chapterNum],
+          loading: false,
+          error: err instanceof Error ? err.message : "Failed to load verse data",
+        }
+      }));
+    }
+  };
+
+  // Effect to fetch initial chapters
+  useEffect(() => {
+    // Fetch current chapter and adjacent chapters
+    fetchChapter(currentChapter);
+    if (currentChapter > 1) {
+      fetchChapter(currentChapter - 1);
+    }
+    fetchChapter(currentChapter + 1);
+  }, [book, currentChapter]);
+
+  // Set up intersection observers for infinite scroll
+  useEffect(() => {
+    const topObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && currentChapter > 1) {
+          // Load previous chapter when top trigger is visible
+          fetchChapter(currentChapter - 1);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const bottomObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          // Load next chapter when bottom trigger is visible
+          fetchChapter(currentChapter + 1);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (topTriggerRef.current) {
+      topObserver.observe(topTriggerRef.current);
+    }
+
+    if (bottomTriggerRef.current) {
+      bottomObserver.observe(bottomTriggerRef.current);
+    }
+
+    return () => {
+      topObserver.disconnect();
+      bottomObserver.disconnect();
+    };
+  }, [currentChapter]);
 
   // Mock data for the study interface - in real app, this would be fetched based on params
   const currentText = {
@@ -440,42 +518,19 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     { id: 5, source: "Shulchan Arukh", text: "יש לו לקרות", era: "Acharonic", year: 1565, type: "final_ruling" },
   ]
 
-  const conceptualIndex = [
-    { concept: "Zman Kriat Shema", count: 47, timeline: ["Torah", "Mishnah", "Talmud", "Rishonim", "Acharonim"] },
-    { concept: "Terumah", count: 23, timeline: ["Torah", "Mishnah", "Talmud"] },
-    { concept: "Ashmurot", count: 15, timeline: ["Mishnah", "Talmud", "Rishonim"] },
-    { concept: "Chatzot", count: 31, timeline: ["Talmud", "Rishonim", "Acharonim"] },
-  ]
-
-  const todaysLearning = {
-    parasha: "Parashat Vayera",
-    dafYomi: "Berakhot 15a",
-    mishnahYomi: "Berakhot 2:3",
-    date: "15 Cheshvan 5785",
-    hebrewDate: "ט״ו חשון תשפ״ה",
-  }
 
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const [activeRightTab, setActiveRightTab] = useState("connections")
   const [selectedSegment, setSelectedSegment] = useState<number | null>(null)
   const [graphView, setGraphView] = useState(false)
-  const [versionCompare, setVersionCompare] = useState(false)
   const [aiLayering, setAiLayering] = useState(false)
   const [aiMode, setAiMode] = useState("pshat")
   const [authorMapView, setAuthorMapView] = useState(false)
   const [lexicalGraphView, setLexicalGraphView] = useState(false)
-  
-  // New tab states
-  const [sugyaMapView, setSugyaMapView] = useState(false)
-  const [psakLineageView, setPsakLineageView] = useState(false)
-  const [layeredAIView, setLayeredAIView] = useState(false)
-  const [annotationsView, setAnnotationsView] = useState(false)
   const [calendarDrawerOpen, setCalendarDrawerOpen] = useState(false)
   const [annotationMode, setAnnotationMode] = useState(false)
-  const [selectedAnnotationType, setSelectedAnnotationType] = useState("halakhic")
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
-  const [mainView, setMainView] = useState("graph")
   
   // Card selection state
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
@@ -723,10 +778,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     };
   }, [scrollLocked, topologyModalOpen]);
 
-  const handleNodeClick = (node: any) => {
-    setSelectedNode(node)
-    setMainView("text")
-  }
 
   const handleAddAnnotation = (segmentId: number) => {
     setSelectedSegment(segmentId)
@@ -747,14 +798,12 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const handlePsakNodeClick = (node: { id: string }) => {
     // TODO: Implement logic to load the full source in the center text pane
     setSelectedSourceId(node.id);
-    setMainView("source");
   };
 
   // Add state and handler at the top of the component:
   const [lexicalSearchTerm, setLexicalSearchTerm] = useState("");
   const handleLexicalNodeClick = (node: { id: string }) => {
     setSelectedSourceId(node.id);
-    setMainView("source");
   };
 
   // Calendars API state
@@ -1016,20 +1065,31 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           <div className="flex-1 overflow-auto">
             {/* Standard Text View */}
             <div className="max-w-5xl mx-auto p-6">
-                {loading ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <span className="ml-3 text-gray-600">Loading verses...</span>
-                  </div>
-                ) : error ? (
-                  <div className="text-center text-red-600">
-                    <p>Error loading verses: {error}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {verseData.map((verse) => (
+                {/* Top loading trigger */}
+                <div ref={topTriggerRef} className="h-4" />
+
+                {/* Render all loaded chapters */}
+                <h1 className="text-5xl font-bold mb-4 text-slate-900 text-center mt-4">{book.charAt(0).toUpperCase() + book.slice(1)}</h1>
+                {Object.entries(chaptersData)
+                  .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                  .map(([chapterNum, chapterData]) => (
+                    <div key={chapterNum} className="mb-8">
+                      <h1 className="text-3xl font-bold mb-4 text-slate-900 text-center mt-16 mb-8">Chapter {chapterNum}</h1>
+                      <hr/>
+                      {chapterData.loading ? (
+                        <div className="flex items-center justify-center h-32">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                          <span className="ml-3 text-gray-600">Loading verses...</span>
+                        </div>
+                      ) : chapterData.error ? (
+                        <div className="text-center text-red-600">
+                          <p>Error loading verses: {chapterData.error}</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {chapterData.verses.map((verse) => (
                       <motion.div
-                        key={verse.verseNumber}
+                        key={`${verse.chapterNumber}-${verse.verseNumber}`}
                         className="group cursor-pointer transition-all duration-200 relative"
                         onClick={() => {
                           setSelectedCardId(verse.verseNumber)
@@ -1097,8 +1157,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         </div>
                       </motion.div>
                     ))}
-                  </div>
-                )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                {/* Bottom loading trigger */}
+                <div ref={bottomTriggerRef} className="h-4" />
               </div>
           </div>
         </div>
@@ -1372,7 +1437,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
             >
               <InteractiveGraph
                 data={sampleGraphData}
-                onNodeClick={handleNodeClick}
+                onNodeClick={() => {}}
                 onClose={() => setGraphView(false)}
               />
             </motion.div>
@@ -1432,7 +1497,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           <CalendarDrawer
             open={calendarDrawerOpen}
             onClose={() => setCalendarDrawerOpen(false)}
-            todaysLearning={todaysLearning}
+            todaysLearning={{
+              parasha: "-",
+              dafYomi: "-",
+              mishnahYomi: "-",
+              date: "-",
+              hebrewDate: "-"
+            }}
           />
         )}
       </AnimatePresence>

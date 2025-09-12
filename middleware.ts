@@ -70,7 +70,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Pattern: /Book.Chapter
-  const bookChapterMatch = pathname.match(/^\/([^\/.]+)\.(\d+)\/?$/)
+  const bookChapterMatch = pathname.match(/^\/([^\/.]+)\.(\d+[a-z]?)\/?$/)
   if (bookChapterMatch) {
     const bookSlug = bookChapterMatch[1]
     const chapter = bookChapterMatch[2]
