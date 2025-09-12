@@ -833,15 +833,27 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                           <>
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-slate-600">Parashat:</span>
-                              <Badge variant="secondary">{parashat?.displayValue?.en || '-'}</Badge>
+                              <Badge variant="secondary">
+                                <Link href={`/${parashat?.url}`} className="text-sm text-blue-700 hover:underline">
+                                  {parashat?.displayValue?.en || '-'}
+                                </Link>
+                              </Badge>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-slate-600">Haftarah:</span>
-                              <Badge variant="secondary">{haftarah?.displayValue?.en || '-'}</Badge>
+                              <Badge variant="secondary">
+                                <Link href={`/${haftarah?.url}`} className="text-sm text-blue-700 hover:underline">
+                                  {haftarah?.displayValue?.en || '-'}
+                                </Link>
+                              </Badge>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-slate-600">Daf Yomi:</span>
-                              <Badge variant="secondary">{dafYomi?.displayValue?.en || '-'}</Badge>
+                              <Badge variant="secondary">
+                                <Link href={`/${dafYomi?.url}`} className="text-sm text-blue-700 hover:underline">
+                                  {dafYomi?.displayValue?.en || '-'}
+                                </Link>
+                              </Badge>
                             </div>
                             <div className="flex items-center justify-between pt-1">
                               <Link href="/calendars" className="text-sm text-blue-700 hover:underline">All Learning Schedules -&gt;</Link>

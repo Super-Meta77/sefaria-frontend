@@ -98,18 +98,20 @@ export default function CalendarsPage() {
                         const display = item?.displayValue?.en || "-";
                         const desc = descriptionByTitle[title] || "A daily or weekly learning cycle.";
                         const card = (
-                          <Card className="border-2 transition-all duration-300 hover:shadow-lg hover:scale-105 cursor-pointer h-full">
-                            <CardHeader>
-                              <CardTitle className="text-xl font-bold text-slate-900">{title}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="flex items-center text-sm text-gray-700 mb-3">
-                                <img src="/icons/book.svg" className="size-[20px] inline-block mr-2" alt="book icon" />
-                                <span className="font-medium">{display}</span>
-                              </div>
-                              <p className="text-gray-600 leading-relaxed text-sm">{desc}</p>
-                            </CardContent>
-                          </Card>
+                          <Link key={`weekly-card-${i}`} href={item.url ?? ""}>
+                            <Card className="border-2 transition-all duration-300 hover:shadow-lg hover:scale-105 cursor-pointer h-full">
+                              <CardHeader>
+                                <CardTitle className="text-xl font-bold text-slate-900">{title}</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="flex items-center text-sm text-gray-700 mb-3">
+                                  <img src="/icons/book.svg" className="size-[20px] inline-block mr-2" alt="book icon" />
+                                  <span className="font-medium">{display}</span>
+                                </div>
+                                <p className="text-gray-600 leading-relaxed text-sm">{desc}</p>
+                              </CardContent>
+                            </Card>
+                          </Link>
                         );
                         return item?.url ? (
                           <Link key={`weekly-card-${i}`} href={item.url}>{card}</Link>
