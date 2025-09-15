@@ -616,14 +616,14 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .data(centeredGraphData.links)
       .enter().append("line")
       .attr("stroke", (d: GraphLink) => linkColors[d.type as keyof typeof linkColors])
-      .attr("stroke-width", (d: GraphLink) => d.strength * 3)
+      .attr("stroke-width", (d: GraphLink) => d.strength * 1.5)
       .attr("opacity", 0.6)
       .attr("marker-end", "url(#arrowhead)")
       .on("mouseover", function(this: SVGLineElement, event: any, d: GraphLink) {
-        d3.select(this).attr("opacity", 1).attr("stroke-width", (d.strength * 3) + 2)
+        d3.select(this).attr("opacity", 1).attr("stroke-width", (d.strength * 1.5) + 1)
       })  
       .on("mouseout", function(this: SVGLineElement, event: any, d: GraphLink) {
-        d3.select(this).attr("opacity", 0.6).attr("stroke-width", d.strength * 3)
+        d3.select(this).attr("opacity", 0.6).attr("stroke-width", d.strength * 1.5)
       })
 
     // Create nodes
@@ -1421,11 +1421,11 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                     <motion.div key="connections-content" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="p-4">
                       {selectedCardId !== null && (
                         <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <p className="text-sm text-blue-800 font-medium">
-                            Selected: Verse {selectedCardId}
+                          <p className="text-md text-blue-800 font-medium">
+                            Selected: {book.charAt(0).toUpperCase() + book.slice(1)} {currentChapter}:{selectedCardId}
                           </p>
-                          <p className="text-xs text-blue-600 mt-1">
-                            Click \"Connect\" to view relationships
+                          <p className="text-sm text-blue-600 mt-1">
+                            Click "Connections" to view relationships
                           </p>
                         </div>
                       )}
