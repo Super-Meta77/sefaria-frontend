@@ -22,6 +22,7 @@ import * as d3 from "d3"
 import SugyaLogicTree from "./SugyaLogicTree"
 import PsakLineageTimeline from "./PsakLineageTimeline"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { fetchConnectionsForVerse } from "@/lib/neo4j"
 
 // Graph interfaces
 interface GraphNode extends d3.SimulationNodeDatum {
@@ -46,6 +47,8 @@ interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
 }
+
+const emptyGraphData: GraphData = { nodes: [], links: [] }
 
 const safeLearning = {
   parasha: "-",
@@ -548,7 +551,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false)
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
   const [selectedNodePreview, setSelectedNodePreview] = useState<GraphNode | null>(null)
-  const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(sampleGraphData)
+  const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
+  const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false)
+  const [connectionsError, setConnectionsError] = useState<string | null>(null)
   const [activeFilters, setActiveFilters] = useState({
     genre: [] as string[],
     author: [] as string[],
@@ -578,9 +583,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const renderGraph = () => {
     if (!graphRef.current) return
     
-    // Generate centered graph data based on selected card
-    const centeredGraphData = generateCenteredGraphData(selectedCardId)
-    if (!centeredGraphData.nodes.length) return
+    // Render only when fetched data is present
+    const centeredGraphData = filteredGraphData
+    if (!centeredGraphData || !centeredGraphData.nodes.length) return
 
     // Clear previous graph
     d3.select(graphRef.current).selectAll("*").remove()
@@ -594,22 +599,37 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .attr("height", height)
       .style("background", "#f8fafc")
 
+    // Define arrowhead marker for directed edges
+    const defs = svg.append("defs")
+    defs.append("marker")
+      .attr("id", "arrowhead")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 10) // place triangle tip exactly at line end
+      .attr("refY", 0)
+      .attr("markerWidth", 10)
+      .attr("markerHeight", 10)
+      .attr("markerUnits", "userSpaceOnUse")
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#64748b")
+
     // Color scales
     const nodeColors = {
-      current: "#3b82f6",
-      halakhic: "#059669",
-      aggadic: "#dc2626",
-      lexical: "#6b7280",
-      responsa: "#10b981",
+      current: "#3b82f6", // blue
+      halakhic: "#2563eb", // blue per spec
+      aggadic: "#dc2626", // red
+      lexical: "#6b7280", // gray
+      responsa: "#10b981", // green
       commentary: "#8b5cf6",
       mishnah: "#f59e0b"
     }
 
     const linkColors = {
-      halakhic: "#059669",
-      aggadic: "#dc2626",
-      lexical: "#6b7280",
-      responsa: "#10b981"
+      halakhic: "#2563eb", // blue per spec
+      aggadic: "#dc2626", // red
+      lexical: "#6b7280", // gray
+      responsa: "#10b981" // green
     }
 
     // Create force simulation
@@ -627,10 +647,11 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .attr("stroke", (d: GraphLink) => linkColors[d.type as keyof typeof linkColors])
       .attr("stroke-width", (d: GraphLink) => d.strength * 3)
       .attr("opacity", 0.6)
-      .on("mouseover", function(event, d: GraphLink) {
+      .attr("marker-end", "url(#arrowhead)")
+      .on("mouseover", function(this: SVGLineElement, event: any, d: GraphLink) {
         d3.select(this).attr("opacity", 1).attr("stroke-width", (d.strength * 3) + 2)
       })  
-      .on("mouseout", function(event, d: GraphLink) {
+      .on("mouseout", function(this: SVGLineElement, event: any, d: GraphLink) {
         d3.select(this).attr("opacity", 0.6).attr("stroke-width", d.strength * 3)
       })
 
@@ -639,6 +660,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .selectAll("g")
       .data(centeredGraphData.nodes)
       .enter().append("g")
+      .style("cursor", "pointer")
       .call(d3.drag<any, GraphNode>()
         .on("start", dragstarted)
         .on("drag", dragged)
@@ -664,7 +686,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .attr("paint-order", "stroke") // Ensure outline is behind text
 
     // Add click handlers
-    node.on("click", (event, d: GraphNode) => {
+    node.on("click", (event: any, d: GraphNode) => {
       setSelectedNodePreview(d)
       // Show node data in right sidebar
       setSelectedNode(d)
@@ -673,7 +695,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     })
 
     // Add hover effects with tooltips
-    node.on("mouseover", function(event, d: GraphNode) {
+    node.on("mouseover", function(this: SVGGElement, event: any, d: GraphNode) {
       d3.select(this).select("circle").attr("r", (d.type === "current" ? 25 : 15) + 3)
       
       // Show tooltip
@@ -701,20 +723,61 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       tooltip.style("left", (event.pageX + 10) + "px")
         .style("top", (event.pageY - 10) + "px")
     })
-    .on("mouseout", function(event, d: GraphNode) {
+    .on("mouseout", function(this: SVGGElement, event: any, d: GraphNode) {
       d3.select(this).select("circle").attr("r", d.type === "current" ? 25 : 15)
       
       // Remove tooltip
       d3.selectAll(".tooltip").remove()
     })
 
-    // Update positions on simulation tick
+    // Helper to get node radius based on type
+    const getNodeRadius = (n: GraphNode) => (n.type === "current" ? 25 : 15)
+
+    // Update positions on simulation tick, trimming links to node edges
     simulation.on("tick", () => {
       link
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y)
+        .attr("x1", (d: any) => {
+          const s = d.source as GraphNode & { x: number; y: number }
+          const t = d.target as GraphNode & { x: number; y: number }
+          const dx = t.x - s.x
+          const dy = t.y - s.y
+          const dist = Math.max(Math.hypot(dx, dy), 0.0001)
+          const nx = dx / dist
+          const rS = getNodeRadius(s)
+          return s.x + nx * rS
+        })
+        .attr("y1", (d: any) => {
+          const s = d.source as GraphNode & { x: number; y: number }
+          const t = d.target as GraphNode & { x: number; y: number }
+          const dx = t.x - s.x
+          const dy = t.y - s.y
+          const dist = Math.max(Math.hypot(dx, dy), 0.0001)
+          const ny = dy / dist
+          const rS = getNodeRadius(s)
+          return s.y + ny * rS
+        })
+        .attr("x2", (d: any) => {
+          const s = d.source as GraphNode & { x: number; y: number }
+          const t = d.target as GraphNode & { x: number; y: number }
+          const dx = t.x - s.x
+          const dy = t.y - s.y
+          const dist = Math.max(Math.hypot(dx, dy), 0.0001)
+          const nx = dx / dist
+          const rT = getNodeRadius(t)
+          const arrowPad = 4
+          return t.x - nx * (rT + arrowPad)
+        })
+        .attr("y2", (d: any) => {
+          const s = d.source as GraphNode & { x: number; y: number }
+          const t = d.target as GraphNode & { x: number; y: number }
+          const dx = t.x - s.x
+          const dy = t.y - s.y
+          const dist = Math.max(Math.hypot(dx, dy), 0.0001)
+          const ny = dy / dist
+          const rT = getNodeRadius(t)
+          const arrowPad = 4
+          return t.y - ny * (rT + arrowPad)
+        })
 
       node
         .attr("transform", (d: any) => `translate(${d.x},${d.y})`)
@@ -744,7 +807,41 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     if (connectionsModalOpen) {
       setTimeout(renderGraph, 100) // Small delay to ensure DOM is ready
     }
-  }, [connectionsModalOpen, selectedCardId])
+  }, [connectionsModalOpen, filteredGraphData])
+
+  // Reset data when modal opens/closes so only loading shows initially
+  useEffect(() => {
+    if (connectionsModalOpen) {
+      setConnectionsError(null)
+      setFilteredGraphData(emptyGraphData)
+      setConnectionsLoading(true)
+    } else {
+      setFilteredGraphData(emptyGraphData)
+      setConnectionsLoading(false)
+      setConnectionsError(null)
+    }
+  }, [connectionsModalOpen])
+
+  // Fetch Neo4j connections when modal opens
+  useEffect(() => {
+    const loadConnections = async () => {
+      if (!connectionsModalOpen || selectedCardId == null) return
+      try {
+        setConnectionsError(null)
+        const normalizedBook = book.charAt(0).toUpperCase() + book.slice(1)
+        const verseId = `${normalizedBook} ${currentChapter}:${selectedCardId}`
+        const data = await fetchConnectionsForVerse(verseId)
+        setFilteredGraphData(data)
+      } catch (e: any) {
+        setConnectionsError(e?.message || "Failed to load connections")
+        // Keep empty on error
+        setFilteredGraphData(emptyGraphData)
+      } finally {
+        setConnectionsLoading(false)
+      }
+    }
+    loadConnections()
+  }, [connectionsModalOpen, selectedCardId, book, currentChapter])
 
   // Synchronized scrolling effect
   useEffect(() => {
@@ -1103,7 +1200,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="absolute top-2 -right-24 z-10"
+                            className="absolute top-2 -right-24 z-10 font-bold text-md"
                             onClick={e => {
                               e.stopPropagation();
                               handleAddAnnotation(verse.verseNumber);
@@ -1560,13 +1657,28 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                   className="w-full h-full"
                   style={{ marginTop: '60px' }}
                 />
+                {connectionsLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="flex items-center text-slate-600 bg-white/80 rounded-md px-4 py-2 shadow">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                      <span className="text-sm">Loading connections…</span>
+                    </div>
+                  </div>
+                )}
+                {connectionsError && (
+                  <div className="absolute top-16 left-4 right-4">
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-md">
+                      {connectionsError}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Connection Type Legend */}
                 <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
                   <h4 className="text-sm font-semibold text-slate-900 mb-2">Connection Types</h4>
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full bg-green-600"></div>
+                      <div className="w-3 h-3 rounded-full bg-blue-600"></div>
                       <span className="text-xs text-slate-700">Halakhic</span>
                     </div>
                     <div className="flex items-center space-x-2">
