@@ -798,11 +798,32 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     }
     fitToView()
 
-    // Drag functions
+    // Drag functions with floating animation
+    let floatingAnimation: any = null
+
     function dragstarted(event: any, d: any) {
       d.fx = d.x
       d.fy = d.y
       updatePositions()
+      
+      // Start floating animation for all non-dragged nodes
+      floatingAnimation = d3.interval(() => {
+        centeredGraphData.nodes.forEach((node: any) => {
+          if (node.id !== d.id && node.fx === undefined && node.fy === undefined) {
+            // Add gentle floating motion (slight shaking)
+            const time = Date.now() * 0.001
+            const floatX = Math.sin(time + node.id.length * 0.5) * 0.5
+            const floatY = Math.cos(time + node.id.length * 0.3) * 0.4
+            
+            // Apply floating offset while maintaining connections
+            node.originalX = node.x
+            node.originalY = node.y
+            node.x = node.originalX + floatX
+            node.y = node.originalY + floatY
+          }
+        })
+        updatePositions()
+      }, 50) // 20 FPS for smooth animation
     }
 
     function dragged(event: any, d: any) {
@@ -814,7 +835,23 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     }
 
     function dragended(event: any, d: any) {
-      // Keep node fixed where dropped to prevent any separation/snap-back
+      // Stop floating animation
+      if (floatingAnimation) {
+        floatingAnimation.stop()
+        floatingAnimation = null
+      }
+      
+      // Restore original positions for floating nodes
+      centeredGraphData.nodes.forEach((node: any) => {
+        if (node.id !== d.id && node.originalX !== undefined && node.originalY !== undefined) {
+          node.x = node.originalX
+          node.y = node.originalY
+          delete node.originalX
+          delete node.originalY
+        }
+      })
+      
+      // Keep dragged node fixed where dropped to prevent any separation/snap-back
       d.fx = d.x
       d.fy = d.y
       updatePositions()
