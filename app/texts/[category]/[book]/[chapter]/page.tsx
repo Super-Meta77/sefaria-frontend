@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { BookOpen, Search, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Hash, Plus, X, Filter, Star, Calendar, Check } from "lucide-react"
+import { BookOpen, Search, ChevronLeft, ChevronRight, Network, GitBranch, Brain, Clock, MessageSquare, Map, Tag, Hash, Plus, X, Filter, Star, Calendar, Check, ZoomIn, ZoomOut, Maximize2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ContentLanguageProvider, useOptionalContentLanguage } from "@/components/content-language-context"
 import { Input } from "@/components/ui/input"
@@ -12,8 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import InteractiveGraph from "@/components/InteractiveGraph"
-import ManuscriptComparison from "@/components/ManuscriptComparison"
 import AuthorMap from "@/components/AuthorMap"
 import LexicalHypergraph from "@/components/LexicalHypergraph"
 import CalendarDrawer from "@/components/CalendarDrawer"
@@ -21,7 +19,6 @@ import Link from "next/link"
 import * as d3 from "d3"
 import SugyaLogicTree from "./SugyaLogicTree"
 import PsakLineageTimeline from "./PsakLineageTimeline"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { fetchConnectionsForVerse } from "@/lib/neo4j"
 
 // Graph interfaces
@@ -57,67 +54,6 @@ const safeLearning = {
   date: "-",
   hebrewDate: "-"
 };
-
-// Sample data for the graph
-const sampleGraphData: GraphData = {
-  nodes: [
-    { id: "current", title: "Berakhot 2a", type: "current", snippet: "Current text about evening Shema timing" },
-    { id: "mishnah1", title: "Mishnah Berakhot 1:1", type: "mishnah", snippet: "Original mishnah about Shema timing", author: "Tannaim", timePeriod: "Tannaitic", genre: "Mishnah" },
-    {
-      id: "rashi1",
-      title: "Rashi on Berakhot 2a",
-      type: "commentary",
-      snippet: "Rashi's explanation of priestly terumah",
-      author: "Rashi",
-      timePeriod: "Medieval",
-      genre: "Commentary"
-    },
-    { id: "tosafot1", title: "Tosafot Berakhot 2a", type: "commentary", snippet: "Tosafot's analysis of the dispute", author: "Tosafot", timePeriod: "Medieval", genre: "Commentary" },
-    { id: "rambam1", title: "Rambam Kriat Shema 1:1", type: "halakhic", snippet: "Rambam's halakhic ruling", author: "Rambam", timePeriod: "Medieval", genre: "Halakhic" },
-    { id: "shulchan1", title: "Shulchan Arukh OC 235", type: "halakhic", snippet: "Final halakhic determination", author: "R. Yosef Karo", timePeriod: "Early Modern", genre: "Halakhic" },
-    { id: "zohar1", title: "Zohar Bereishit 12b", type: "aggadic", snippet: "Mystical interpretation of evening", author: "R. Shimon bar Yochai", timePeriod: "Tannaitic", genre: "Kabbalah" },
-  ],
-  links: [
-    { source: "current", target: "mishnah1", type: "halakhic", strength: 0.9, snippet: "Direct halakhic connection" },
-    { source: "current", target: "rashi1", type: "lexical", strength: 0.8, snippet: "Lexical explanation" },
-    { source: "current", target: "tosafot1", type: "halakhic", strength: 0.7, snippet: "Halakhic analysis" },
-    { source: "mishnah1", target: "rambam1", type: "halakhic", strength: 0.8, snippet: "Halakhic codification" },
-    { source: "rambam1", target: "shulchan1", type: "halakhic", strength: 0.9, snippet: "Final halakhic ruling" },
-    { source: "current", target: "zohar1", type: "aggadic", strength: 0.4, snippet: "Mystical interpretation" },
-  ],
-}
-
-// Function to generate graph data centered on selected card
-const generateCenteredGraphData = (selectedCardId: number | null): GraphData => {
-  if (!selectedCardId) return sampleGraphData
-  
-  // Create a new center node based on the selected card
-  const centerNode: GraphNode = {
-    id: `verse-${selectedCardId}`,
-    title: `Verse ${selectedCardId}`,
-    type: "current",
-    snippet: `Selected text from verse ${selectedCardId}`,
-    author: "Current Text",
-    timePeriod: "Current",
-    genre: "Text"
-  }
-  
-  // Create connections from the selected card to other nodes
-  const newLinks: GraphLink[] = sampleGraphData.nodes
-    .filter(node => node.id !== "current")
-    .map(node => ({
-      source: `verse-${selectedCardId}`,
-      target: node.id,
-      type: node.type as any,
-      strength: Math.random() * 0.5 + 0.3, // Random strength between 0.3-0.8
-      snippet: `Connection from verse ${selectedCardId} to ${node.title}`
-    }))
-  
-  return {
-    nodes: [centerNode, ...sampleGraphData.nodes.filter(node => node.id !== "current")],
-    links: newLinks
-  }
-}
 
 // Enhanced manuscript data for Textual Topology Engine
 const manuscriptVersions = {
@@ -549,7 +485,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   
   // Graph state
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false)
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(true)
   const [selectedNodePreview, setSelectedNodePreview] = useState<GraphNode | null>(null)
   const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false)
@@ -569,6 +505,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     })
   }
   const graphRef = useRef<HTMLDivElement>(null)
+  const svgSelectionRef = useRef<any>(null)
+  const zoomLayerRef = useRef<any>(null)
+  const zoomBehaviorRef = useRef<any>(null)
   const leftPanelRef = useRef<HTMLDivElement>(null)
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
@@ -598,6 +537,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .attr("width", width)
       .attr("height", height)
       .style("background", "#f8fafc")
+    svgSelectionRef.current = svg
 
     // Define arrowhead marker for directed edges
     const defs = svg.append("defs")
@@ -632,6 +572,20 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       responsa: "#10b981" // green
     }
 
+    // Utility: lighten a hex color by mixing towards white
+    const lightenColor = (hex: string, factor: number) => {
+      const m = hex.match(/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i)
+      if (!m) return hex
+      const r = parseInt(m[1], 16)
+      const g = parseInt(m[2], 16)
+      const b = parseInt(m[3], 16)
+      const lr = Math.round(r + (255 - r) * factor)
+      const lg = Math.round(g + (255 - g) * factor)
+      const lb = Math.round(b + (255 - b) * factor)
+      const toHex = (v: number) => v.toString(16).padStart(2, '0')
+      return `#${toHex(lr)}${toHex(lg)}${toHex(lb)}`
+    }
+
     // Create force simulation
     const simulation = d3.forceSimulation(centeredGraphData.nodes as d3.SimulationNodeDatum[])
       .force("link", d3.forceLink(centeredGraphData.links).id((d: any) => d.id).distance(100))
@@ -639,8 +593,25 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(30))
 
+    // Pre-tick the simulation to settle positions before rendering (no initial animation)
+    simulation.stop()
+    for (let i = 0; i < 300; i++) simulation.tick()
+
+    // Zoom wrapper layer so we can pan/zoom content
+    const zoomLayer = svg.append("g").attr("class", "zoom-layer")
+    zoomLayerRef.current = zoomLayer
+
+    // Zoom behavior
+    const zoomBehavior = d3.zoom<any, any>()
+      .scaleExtent([0.2, 5])
+      .on("zoom", (event: any) => {
+        zoomLayer.attr("transform", event.transform)
+      })
+    svg.call(zoomBehavior as any)
+    zoomBehaviorRef.current = zoomBehavior
+
     // Create links
-    const link = svg.append("g")
+    const link = zoomLayer.append("g")
       .selectAll("line")
       .data(centeredGraphData.links)
       .enter().append("line")
@@ -656,7 +627,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       })
 
     // Create nodes
-    const node = svg.append("g")
+    const node = zoomLayer.append("g")
       .selectAll("g")
       .data(centeredGraphData.nodes)
       .enter().append("g")
@@ -669,8 +640,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     // Add circles to nodes
     node.append("circle")
       .attr("r", (d: GraphNode) => d.type === "current" ? 25 : 15)
-      .attr("fill", (d: GraphNode) => nodeColors[d.type])
-      .attr("stroke", (d: GraphNode) => d.type === "current" ? "#1e40af" : "#fff")
+      .attr("fill", (d: GraphNode) => lightenColor(nodeColors[d.type], 0.6))
+      .attr("stroke", (d: GraphNode) => nodeColors[d.type])
       .attr("stroke-width", (d: GraphNode) => d.type === "current" ? 4 : 2)
 
     // Add labels to nodes with enhanced visibility
@@ -733,8 +704,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     // Helper to get node radius based on type
     const getNodeRadius = (n: GraphNode) => (n.type === "current" ? 25 : 15)
 
-    // Update positions on simulation tick, trimming links to node edges
-    simulation.on("tick", () => {
+    // Update positions helper (used for initial draw and during drag)
+    const updatePositions = () => {
       link
         .attr("x1", (d: any) => {
           const s = d.source as GraphNode & { x: number; y: number }
@@ -781,24 +752,72 @@ function ChapterPageInner({ params }: ChapterPageProps) {
 
       node
         .attr("transform", (d: any) => `translate(${d.x},${d.y})`)
-    })
+    }
+
+    // Draw initial positions without animation
+    updatePositions()
+
+    // Zoom to fit initially (compute bounds from node positions for accuracy)
+    const fitToView = () => {
+      try {
+        const nodes = centeredGraphData.nodes as any[]
+        if (!nodes || nodes.length === 0) return
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const n of nodes) {
+          const r = getNodeRadius(n as GraphNode)
+          const x0 = n.x - r
+          const x1 = (n.x as number) + r
+          const y0 = n.y - r
+          const y1 = (n.y as number) + r
+          if (x0 < minX) minX = x0
+          if (y0 < minY) minY = y0
+          if (x1 > maxX) maxX = x1
+          if (y1 > maxY) maxY = y1
+        }
+        // Add extra room for arrowheads and strokes
+        const extra = 24
+        minX -= extra
+        minY -= extra
+        maxX += extra
+        maxY += extra
+
+        const contentWidth = Math.max(1, maxX - minX)
+        const contentHeight = Math.max(1, maxY - minY)
+        const padding = 60
+        const scale = Math.min(
+          (width - padding) / contentWidth,
+          (height - padding) / contentHeight
+        ) * 0.95
+        const cx = minX + contentWidth / 2
+        const cy = minY + contentHeight / 2
+        const translateX = width / 2 - scale * cx
+        const translateY = height / 2 - scale * cy
+        const transform = d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+        svg.call(zoomBehavior.transform as any, transform)
+      } catch {}
+    }
+    fitToView()
 
     // Drag functions
     function dragstarted(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0.3).restart()
       d.fx = d.x
       d.fy = d.y
+      updatePositions()
     }
 
     function dragged(event: any, d: any) {
       d.fx = event.x
       d.fy = event.y
+      d.x = event.x
+      d.y = event.y
+      updatePositions()
     }
 
     function dragended(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0)
-      d.fx = null
-      d.fy = null
+      // Keep node fixed where dropped to prevent any separation/snap-back
+      d.fx = d.x
+      d.fy = d.y
+      updatePositions()
     }
   }
 
@@ -1515,33 +1534,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         </AnimatePresence>
       </div>
 
-      {/* Feature 1: Graph Modal */}
-      <AnimatePresence>
-        {graphView && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
-            onClick={() => setGraphView(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              className="bg-white rounded-lg max-w-6xl max-h-[90vh] overflow-hidden w-full mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <InteractiveGraph
-                data={sampleGraphData}
-                onNodeClick={() => {}}
-                onClose={() => setGraphView(false)}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Feature 6: Author Map Modal */}
       <AnimatePresence>
         {authorMapView && (
@@ -1622,7 +1614,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
-              className="bg-white rounded-lg w-[70vw] h-[80vh] overflow-hidden flex"
+              className="bg-white rounded-lg w-[90vw] h-[90vh] overflow-hidden flex"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Main Graph Area */}
@@ -1630,6 +1622,18 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                 <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
                   <h2 className="text-xl font-bold text-slate-900">Intertextual Connections</h2>
                   <div className="flex items-center space-x-2">
+                    {/* Zoom Toolbar */}
+                    <div className="hidden sm:flex items-center space-x-1 mr-2">
+                      <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); if (svgSelectionRef.current && zoomBehaviorRef.current) svgSelectionRef.current.transition().duration(0).call(zoomBehaviorRef.current.scaleBy, 1.2) }}>
+                        <ZoomIn className="w-4 h-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); if (svgSelectionRef.current && zoomBehaviorRef.current) svgSelectionRef.current.transition().duration(0).call(zoomBehaviorRef.current.scaleBy, 1/1.2) }}>
+                        <ZoomOut className="w-4 h-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); if (svgSelectionRef.current && zoomBehaviorRef.current && graphRef.current && filteredGraphData?.nodes?.length) { const svgSel = svgSelectionRef.current; const nodes = filteredGraphData.nodes as any[]; const width = graphRef.current.clientWidth; const height = graphRef.current.clientHeight; let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity; for (const n of nodes) { const r = (n.type === "current" ? 25 : 15); const x0 = n.x - r; const x1 = n.x + r; const y0 = n.y - r; const y1 = n.y + r; if (x0 < minX) minX = x0; if (y0 < minY) minY = y0; if (x1 > maxX) maxX = x1; if (y1 > maxY) maxY = y1; } const extra = 24; minX -= extra; minY -= extra; maxX += extra; maxY += extra; const contentWidth = Math.max(1, maxX - minX); const contentHeight = Math.max(1, maxY - minY); const padding = 60; const scale = Math.min((width - padding) / contentWidth, (height - padding) / contentHeight) * 0.95; const cx = minX + contentWidth / 2; const cy = minY + contentHeight / 2; const translateX = width / 2 - scale * cx; const translateY = height / 2 - scale * cy; const transform = d3.zoomIdentity.translate(translateX, translateY).scale(scale); svgSel.transition().duration(0).call(zoomBehaviorRef.current.transform, transform); } }}>
+                        <Maximize2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                     <Button
                       variant="outline"
                       size="sm"
