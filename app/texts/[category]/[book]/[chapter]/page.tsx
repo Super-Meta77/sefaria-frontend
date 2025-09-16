@@ -268,6 +268,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   
   // Current chapter number
   const currentChapter = parseInt(chapter);
+  // Active verse and chapter derived from viewport detection
+  const [activeVerse, setActiveVerse] = useState<{ chapter: number; verse: number } | null>(null)
+  const [activeChapter, setActiveChapter] = useState<number>(currentChapter)
 
   // Function to fetch a single chapter
   const fetchChapter = async (chapterNum: number) => {
@@ -317,6 +320,30 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         chapterNumber: chapterNum
       }));
 
+      // If we're prepending content above the current view, preserve scroll position anchored to an element
+      const scroller = scrollerRef.current
+      const shouldAdjustScroll = !!scroller && chapterNum < activeChapter
+      let anchorEl: HTMLElement | null = null
+      let anchorOffset = 0
+      if (shouldAdjustScroll && scroller) {
+        if (activeVerse && Number.isFinite(activeVerse.chapter) && Number.isFinite(activeVerse.verse)) {
+          anchorEl = verseRefs.current[`${activeVerse.chapter}-${activeVerse.verse}`] || null
+        }
+        if (!anchorEl) {
+          const rect = scroller.getBoundingClientRect()
+          const x = rect.left + rect.width / 2
+          const y = rect.top + rect.height / 2
+          let el = document.elementFromPoint(x, y) as HTMLElement | null
+          while (el && el !== scroller && !el.dataset?.verse && !el.dataset?.paragraphId) {
+            el = el.parentElement
+          }
+          anchorEl = el
+        }
+        if (anchorEl) {
+          anchorOffset = anchorEl.offsetTop - scroller.scrollTop
+        }
+      }
+
       setChaptersData(prev => ({
         ...prev,
         [chapterNum]: {
@@ -326,6 +353,18 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           chapterNumber: chapterNum
         }
       }));
+
+      if (shouldAdjustScroll && scroller && anchorEl) {
+        requestAnimationFrame(() => {
+          const sc = scrollerRef.current
+          if (!sc || !anchorEl) return
+          isProgrammaticScrollRef.current = true
+          sc.scrollTop = anchorEl.offsetTop - anchorOffset
+          requestAnimationFrame(() => {
+            isProgrammaticScrollRef.current = false
+          })
+        })
+      }
     } catch (err) {
       console.error(`Error fetching chapter ${chapterNum}:`, err);
       setChaptersData(prev => ({
@@ -339,51 +378,55 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     }
   };
 
-  // Effect to fetch initial chapters
+  // Effect to fetch initial chapters sequentially (current, then adjacents)
   useEffect(() => {
-    // Fetch current chapter and adjacent chapters
-    fetchChapter(currentChapter);
-    if (currentChapter > 1) {
-      fetchChapter(currentChapter - 1);
+    let cancelled = false
+    let preloading = true
+    const run = async () => {
+      await fetchChapter(currentChapter)
+      if (cancelled) return
+      if (currentChapter > 1) {
+        await fetchChapter(currentChapter - 1)
+      }
+      if (cancelled) return
+      await fetchChapter(currentChapter + 1)
+      preloading = false
     }
-    fetchChapter(currentChapter + 1);
-  }, [book, currentChapter]);
+    void run()
+    return () => { cancelled = true }
+  }, [book, currentChapter])
 
-  // Set up intersection observers for infinite scroll
+  // When the currently displayed chapter changes, fetch its adjacents and prune state
   useEffect(() => {
-    const topObserver = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && currentChapter > 1) {
-          // Load previous chapter when top trigger is visible
-          fetchChapter(currentChapter - 1);
-        }
-      },
-      { threshold: 0.1 }
-    );
+    const run = async () => {
+      if (!Number.isFinite(activeChapter)) return
+      // Ensure active chapter is present (if navigated across boundary quickly)
+      if (!chaptersData[activeChapter]?.verses?.length && !chaptersData[activeChapter]?.loading) {
+        await fetchChapter(activeChapter)
+      }
+      // Fetch previous and next in background as needed
+      if (activeChapter > 1) {
+        await fetchChapter(activeChapter - 1)
+      }
+      await fetchChapter(activeChapter + 1)
 
-    const bottomObserver = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          // Load next chapter when bottom trigger is visible
-          fetchChapter(currentChapter + 1);
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    if (topTriggerRef.current) {
-      topObserver.observe(topTriggerRef.current);
+      // Delay pruning slightly to avoid visible drift after correction
+      setTimeout(() => {
+        const allowed = new Set([activeChapter - 1, activeChapter, activeChapter + 1].filter(n => n > 0))
+        setChaptersData(prev => {
+          const next: typeof prev = {}
+          for (const k of Object.keys(prev)) {
+            const num = parseInt(k)
+            if (allowed.has(num)) next[num] = prev[num]
+          }
+          return next
+        })
+      }, 120)
     }
+    void run()
+  }, [activeChapter])
 
-    if (bottomTriggerRef.current) {
-      bottomObserver.observe(bottomTriggerRef.current);
-    }
-
-    return () => {
-      topObserver.disconnect();
-      bottomObserver.disconnect();
-    };
-  }, [currentChapter]);
+  // Removed scroll-triggered top/bottom fetch observers per new requirements
 
   // Mock data for the study interface - in real app, this would be fetched based on params
   const currentText = {
@@ -510,6 +553,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const zoomBehaviorRef = useRef<any>(null)
   const leftPanelRef = useRef<HTMLDivElement>(null)
   const rightPanelRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const verseRefs = useRef<Record<string, HTMLElement | null>>({})
+  const isProgrammaticScrollRef = useRef<boolean>(false)
 
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
 
@@ -986,6 +1032,110 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     fetchCalendars();
   }, []);
 
+  // After chapters load, center requested chapter or verse only once,
+  // and only after current, previous (if any), and next are loaded
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const path = typeof window !== 'undefined' ? window.location.pathname : ''
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    if (!path) return
+
+    // Determine the chapter we should be on from activeChapter (driven by detection)
+    const current = activeChapter
+    if (!Number.isFinite(current)) return
+
+    // Require prev (if >1), current, and next to be present
+    const needPrev = current > 1
+    const prevReady = needPrev ? !!chaptersData[current - 1]?.verses?.length : true
+    const currReady = !!chaptersData[current]?.verses?.length
+    const nextReady = !!chaptersData[current + 1]?.verses?.length
+    if (!(prevReady && currReady && nextReady)) return
+
+    // Compute target
+    const verseNum = hash.startsWith('#') ? parseInt(hash.slice(1)) : NaN
+    let targetEl: HTMLElement | null = null
+    if (Number.isFinite(verseNum)) {
+      targetEl = verseRefs.current[`${current}-${verseNum}`] || null
+    }
+    if (!targetEl) {
+      const first = chaptersData[current]?.verses?.[0]?.verseNumber
+      if (Number.isFinite(first)) {
+        targetEl = verseRefs.current[`${current}-${first}`] || null
+      }
+    }
+    if (!targetEl) return
+
+    // Only scroll once per load
+    let did = (scroller as any).__didInitialCenter
+    if (did) return
+    ;(scroller as any).__didInitialCenter = true
+
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [chaptersData, activeChapter])
+
+  // Update URL when the detected active verse changes (debounced by rAF in observer)
+  useEffect(() => {
+    if (!activeVerse) return
+    const target = `/${book}.${activeVerse.chapter}.${activeVerse.verse}`
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.location.pathname !== target || window.location.hash) {
+          window.history.replaceState(null, "", target)
+        }
+      }
+    } catch {}
+  }, [activeVerse, book])
+
+  // Detect active verse centered in the scroll container
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    const elements = Object.values(verseRefs.current).filter(Boolean) as HTMLElement[]
+    if (!scroller || elements.length === 0) return
+
+    const pickClosestToCenter = () => {
+      const rect = scroller.getBoundingClientRect()
+      const centerY = rect.top + rect.height / 2
+      let best: { el: HTMLElement; dist: number } | null = null
+      for (const el of elements) {
+        const r = el.getBoundingClientRect()
+        const mid = r.top + r.height / 2
+        const dist = Math.abs(mid - centerY)
+        if (!best || dist < best.dist) best = { el, dist }
+      }
+      if (best) {
+        const c = Number(best.el.dataset.chapter)
+        const v = Number(best.el.dataset.verse || best.el.dataset.paragraphId)
+        if (Number.isFinite(c) && Number.isFinite(v)) {
+          setActiveVerse(prev => (prev && prev.chapter === c && prev.verse === v) ? prev : { chapter: c, verse: v })
+          // If chapter changed, update activeChapter to drive adjacent preloading and pruning
+          setActiveChapter(prevC => (prevC === c ? prevC : c))
+        }
+      }
+    }
+
+    // Debounce via rAF to avoid too-frequent computations
+    let raf = 0
+    const observer = new IntersectionObserver(() => {
+      if (isProgrammaticScrollRef.current) return
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        pickClosestToCenter()
+      })
+    }, { root: scroller, rootMargin: "-50% 0px -50% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] })
+
+    elements.forEach(el => observer.observe(el))
+
+    // Initial computation
+    pickClosestToCenter()
+
+    return () => {
+      observer.disconnect()
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [chaptersData])
+
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
       {/* Top sub-header under global header to show breadcrumb and controls */}
@@ -1146,6 +1296,11 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               </div>
 
               <div className="flex items-center space-x-6">
+                {activeVerse && (
+                  <div className="hidden sm:block text-sm text-slate-600">
+                    Now viewing: {book.charAt(0).toUpperCase() + book.slice(1)} {activeVerse.chapter}:{activeVerse.verse}
+                  </div>
+                )}
                 {/* Display Mode Controls - Segmented Control */}
                 <div className="relative inline-grid grid-cols-3 rounded-full border shadow-sm bg-gray-100 overflow-hidden">
                   {/* Sliding highlight */}
@@ -1215,7 +1370,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           </div>
 
           {/* Main Text Area */}
-          <div className="flex-1 overflow-auto">
+          <div ref={scrollerRef} className="flex-1 overflow-auto">
             {/* Standard Text View */}
             <div className="max-w-5xl mx-auto p-6">
                 {/* Top loading trigger */}
@@ -1243,6 +1398,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                           {chapterData.verses.map((verse) => (
                       <motion.div
                         key={`${verse.chapterNumber}-${verse.verseNumber}`}
+                        ref={(el: HTMLDivElement | null) => { verseRefs.current[`${verse.chapterNumber}-${verse.verseNumber}`] = el as HTMLElement | null }}
+                        data-chapter={verse.chapterNumber}
+                        data-verse={verse.verseNumber}
                         className="group cursor-pointer transition-all duration-200 relative"
                         onClick={() => {
                           setSelectedCardId(verse.verseNumber)

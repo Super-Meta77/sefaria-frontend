@@ -91,6 +91,30 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // Pattern: /Book.Chapter.Verse
+  const bookChapterVerseMatch = pathname.match(/^\/([^\/.]+)\.(\d+[a-z]?)\.(\d+)\/?$/)
+  if (bookChapterVerseMatch) {
+    const bookSlug = bookChapterVerseMatch[1]
+    const chapter = bookChapterVerseMatch[2]
+    const verse = bookChapterVerseMatch[3]
+    if (RESERVED_TOP_LEVEL.has('/' + bookSlug.toLowerCase())) {
+      return NextResponse.next()
+    }
+    try {
+      const title = normalizeBookParam(bookSlug)
+      const res = await fetch(`https://www.sefaria.org/api/v2/index/${encodeURIComponent(title)}`)
+      if (res.ok) {
+        const data = await res.json()
+        const category = (Array.isArray(data?.categories) ? data.categories[0] : data?.category) || 'texts'
+        const rewriteUrl = req.nextUrl.clone()
+        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category).toLowerCase())}/${bookSlug}/${chapter}`
+        rewriteUrl.hash = `#${verse}`
+        return NextResponse.rewrite(rewriteUrl)
+      }
+    } catch {}
+    return NextResponse.next()
+  }
+
   return NextResponse.next()
 }
 
