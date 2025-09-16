@@ -242,9 +242,9 @@ interface ChapterData {
 
 interface ChapterPageProps {
   params: {
-    category: string
     book: string
     chapter: string
+    verse: string
   }
 }
 
@@ -257,7 +257,7 @@ export default function ChapterPage({ params }: ChapterPageProps) {
 }
 
 function ChapterPageInner({ params }: ChapterPageProps) {
-  const { category, book, chapter } = params
+  const { book, chapter, verse } = params
 
   // State for chapter data
   const [chaptersData, setChaptersData] = useState<{ [key: number]: ChapterData }>({});
@@ -266,11 +266,80 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const topTriggerRef = useRef<HTMLDivElement>(null);
   const bottomTriggerRef = useRef<HTMLDivElement>(null);
   
-  // Current chapter number
-  const currentChapter = parseInt(chapter);
+  // Utility function to parse chapter and verse from URL
+  const parseChapterAndVerseFromUrl = () => {
+    if (typeof window === 'undefined') return { chapter: null, verse: null };
+    
+    const pathname = window.location.pathname;
+    const hash = window.location.hash;
+    
+    // Check for short format URLs like /Book.Chapter.Verse
+    const shortFormatMatch = pathname.match(/\/([^\/]+)\.(\d+[a-z]?)\.(\d+)\/?$/);
+    if (shortFormatMatch) {
+      return {
+        chapter: parseInt(shortFormatMatch[2]),
+        verse: parseInt(shortFormatMatch[3])
+      };
+    }
+    
+    // Check for short format URLs like /Book.Chapter
+    const shortChapterMatch = pathname.match(/\/([^\/]+)\.(\d+[a-z]?)\/?$/);
+    if (shortChapterMatch) {
+      const verseFromHash = hash ? parseInt(hash.replace('#', '')) : null;
+      return {
+        chapter: parseInt(shortChapterMatch[2]),
+        verse: verseFromHash
+      };
+    }
+    
+    // For standard format URLs like /texts/category/book/chapter
+    const pathParts = pathname.split('/').filter(Boolean);
+    if (pathParts.length >= 4 && pathParts[0] === 'texts') {
+      const chapterParam = pathParts[3];
+      const verseFromHash = hash ? parseInt(hash.replace('#', '')) : null;
+      return {
+        chapter: parseInt(chapterParam),
+        verse: verseFromHash
+      };
+    }
+    
+    return { chapter: null, verse: null };
+  };
+
+  // Parse chapter and verse from URL - support formats like "chapter" or "chapter.verse"
+  const parseChapterAndVerse = (chapterParam: string, verseParam: string) => {
+    const parts = chapterParam.split('.');
+    const chapterNum = parseInt(parts[0]);
+    const verseNum = verseParam ? parseInt(verseParam) : null;
+    return { chapter: chapterNum, verse: verseNum };
+  };
+
+  // State to hold URL-parsed values
+  const [urlParsedData, setUrlParsedData] = useState<{ chapter: number | null; verse: number | null }>({ chapter: null, verse: null });
+  // Track if we've completed the initial scroll to target verse
+  const [hasScrolledToTarget, setHasScrolledToTarget] = useState(false);
+
+  // Parse from URL on client side when component mounts
+  useEffect(() => {
+    const urlData = parseChapterAndVerseFromUrl();
+    setUrlParsedData(urlData);
+  }, []);
+
+
+  // Use URL-parsed data if available, otherwise fall back to route params
+  const { chapter: routeChapter, verse: routeVerse } = parseChapterAndVerse(chapter, verse);
+  const currentChapter = urlParsedData.chapter || routeChapter;
+  const targetVerseFromUrl = urlParsedData.verse || routeVerse;
   // Active verse and chapter derived from viewport detection
   const [activeVerse, setActiveVerse] = useState<{ chapter: number; verse: number } | null>(null)
   const [activeChapter, setActiveChapter] = useState<number>(currentChapter)
+
+  // Update activeChapter when URL-parsed data changes
+  useEffect(() => {
+    if (urlParsedData.chapter) {
+      setActiveChapter(urlParsedData.chapter);
+    }
+  }, [urlParsedData.chapter]);
 
   // Function to fetch a single chapter
   const fetchChapter = async (chapterNum: number) => {
@@ -388,50 +457,64 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     let preloading = true
     const run = async () => {
       await fetchChapter(currentChapter)
-      // If there is a target verse, force viewport to top of the chapter first (no smooth)
-      if (!cancelled && initialTargetVerseRef.current != null) {
-        requestAnimationFrame(() => {
-          const sc = scrollerRef.current
-          const topEl = verseRefs.current[`${currentChapter}-1`]
-          if (sc && topEl) {
-            isProgrammaticScrollRef.current = true
-            sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
-            requestAnimationFrame(() => {
-              isProgrammaticScrollRef.current = false
-            })
-          }
-        })
+      
+      // After chapter loads, scroll to target verse (from URL or hash) or chapter start
+      if (!cancelled) {
+        const targetVerse = initialTargetVerseRef.current
+        
+        if (targetVerse != null) {
+          // If there is a target verse, first jump to top of chapter (instant), then smooth scroll to verse
+          requestAnimationFrame(() => {
+            const sc = scrollerRef.current
+            const topEl = verseRefs.current[`${currentChapter}-1`]
+            if (sc && topEl) {
+              isProgrammaticScrollRef.current = true
+              sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
+              
+              // Then smooth scroll to the target verse
+              requestAnimationFrame(() => {
+                const verseEl = verseRefs.current[`${currentChapter}-${targetVerse}`]
+                if (verseEl) {
+                  verseEl.scrollIntoView({ behavior: "smooth", block: "center" })
+                  setTimeout(() => {
+                    isProgrammaticScrollRef.current = false
+                  }, 900)
+                } else {
+                  isProgrammaticScrollRef.current = false
+                }
+              })
+            }
+          })
+        } else {
+          // No target verse - just scroll to beginning of chapter
+          requestAnimationFrame(() => {
+            const sc = scrollerRef.current
+            const topEl = verseRefs.current[`${currentChapter}-1`]
+            if (sc && topEl) {
+              isProgrammaticScrollRef.current = true
+              sc.scrollTo({ top: topEl.offsetTop, behavior: "smooth" })
+              setTimeout(() => {
+                isProgrammaticScrollRef.current = false
+              }, 500)
+            }
+          })
+        }
       }
+      
       if (cancelled) return
       // Do not preload previous chapter on initial mount to avoid prepending content shifting the viewport
       if (cancelled) return
       await fetchChapter(currentChapter + 1)
       preloading = false
-      
-      // After current and next are ready, smooth scroll to the target verse (if specified)
-      if (!cancelled && initialTargetVerseRef.current != null) {
-        const targetVerse = initialTargetVerseRef.current
-        requestAnimationFrame(() => {
-          const el = verseRefs.current[`${currentChapter}-${targetVerse}`]
-          const sc = scrollerRef.current
-          if (!el || !sc) return
-          isProgrammaticScrollRef.current = true
-          el.scrollIntoView({ behavior: "smooth", block: "start" })
-          setTimeout(() => {
-            isProgrammaticScrollRef.current = false
-          }, 900)
-        })
-      }
     }
     void run()
     return () => { cancelled = true }
   }, [book, currentChapter])
 
-  // After verses render, perform two-step scroll: jump to top of chapter, then smooth scroll to target verse
+  // Fallback scroll effect - ensures scroll happens even if main effect doesn't work
   useEffect(() => {
     if (hasDoneInitialScrollRef.current) return
     const targetVerse = initialTargetVerseRef.current
-    if (targetVerse == null) return
     const chapterData = chaptersData[currentChapter]
     if (!chapterData || !chapterData.verses || chapterData.verses.length === 0) return
 
@@ -442,24 +525,44 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       attempts++
       const sc = scrollerRef.current
       const topEl = verseRefs.current[`${currentChapter}-1`]
-      const verseEl = verseRefs.current[`${currentChapter}-${targetVerse}`]
-      if (!sc || !topEl || !verseEl) {
+      
+      if (!sc || !topEl) {
         if (attempts < maxAttempts) {
           requestAnimationFrame(tryScroll)
         }
         return
       }
-      isProgrammaticScrollRef.current = true
-      // Step 1: immediately jump to top of chapter
-      sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
-      // Step 2: smooth scroll to target verse on next frame
-      requestAnimationFrame(() => {
-        verseEl.scrollIntoView({ behavior: "smooth", block: "start" })
+
+      if (targetVerse != null) {
+        // Try to scroll to specific verse
+        const verseEl = verseRefs.current[`${currentChapter}-${targetVerse}`]
+        if (!verseEl) {
+          if (attempts < maxAttempts) {
+            requestAnimationFrame(tryScroll)
+          }
+          return
+        }
+        
+        isProgrammaticScrollRef.current = true
+        // Step 1: immediately jump to top of chapter
+        sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
+        // Step 2: smooth scroll to target verse on next frame
+        requestAnimationFrame(() => {
+          verseEl.scrollIntoView({ behavior: "smooth", block: "center" })
+          setTimeout(() => {
+            isProgrammaticScrollRef.current = false
+            hasDoneInitialScrollRef.current = true
+          }, 900)
+        })
+      } else {
+        // No target verse - just scroll to beginning of chapter
+        isProgrammaticScrollRef.current = true
+        sc.scrollTo({ top: topEl.offsetTop, behavior: "smooth" })
         setTimeout(() => {
           isProgrammaticScrollRef.current = false
           hasDoneInitialScrollRef.current = true
-        }, 900)
-      })
+        }, 500)
+      }
     }
 
     requestAnimationFrame(tryScroll)
@@ -652,15 +755,23 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const initialTargetVerseRef = useRef<number | null>(null)
   const hasDoneInitialScrollRef = useRef<boolean>(false)
 
-  // Read verse target from hash if present (e.g., #21)
+  // Read verse target from URL or hash if present (e.g., chapter.21 or #21)
   useEffect(() => {
     if (typeof window === "undefined") return
+    
+    // Priority 1: Verse from URL path (e.g., /texts/category/book/chapter.verse)
+    if (targetVerseFromUrl && Number.isFinite(targetVerseFromUrl) && targetVerseFromUrl > 0) {
+      initialTargetVerseRef.current = targetVerseFromUrl
+      return
+    }
+    
+    // Priority 2: Verse from hash fragment (e.g., #21)
     const hash = (window.location.hash || "").replace(/^#/, "").trim()
     const maybeVerse = parseInt(hash, 10)
     if (Number.isFinite(maybeVerse) && maybeVerse > 0) {
       initialTargetVerseRef.current = maybeVerse
     }
-  }, [])
+  }, [targetVerseFromUrl])
 
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
 
@@ -1157,18 +1268,30 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const nextReady = !!chaptersData[current + 1]?.verses?.length
     if (!(prevReady && currReady && nextReady)) return
 
-    // Compute target
-    const verseNum = hash.startsWith('#') ? parseInt(hash.slice(1)) : NaN
+    // Compute target - prioritize URL verse, then hash verse, then first verse
     let targetEl: HTMLElement | null = null
-    if (Number.isFinite(verseNum)) {
-      targetEl = verseRefs.current[`${current}-${verseNum}`] || null
+    
+    // Priority 1: Verse from URL (e.g., chapter.verse)
+    if (targetVerseFromUrl && Number.isFinite(targetVerseFromUrl)) {
+      targetEl = verseRefs.current[`${current}-${targetVerseFromUrl}`] || null
     }
+    
+    // Priority 2: Verse from hash fragment (e.g., #21)
+    if (!targetEl) {
+      const verseNum = hash.startsWith('#') ? parseInt(hash.slice(1)) : NaN
+      if (Number.isFinite(verseNum)) {
+        targetEl = verseRefs.current[`${current}-${verseNum}`] || null
+      }
+    }
+    
+    // Priority 3: First verse of chapter
     if (!targetEl) {
       const first = chaptersData[current]?.verses?.[0]?.verseNumber
       if (Number.isFinite(first)) {
         targetEl = verseRefs.current[`${current}-${first}`] || null
       }
     }
+    
     if (!targetEl) return
 
     // Only scroll once per load
@@ -1177,7 +1300,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     ;(scroller as any).__didInitialCenter = true
 
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [chaptersData, activeChapter])
+  }, [chaptersData, activeChapter, targetVerseFromUrl])
 
   // Update URL when the detected active verse changes (debounced by rAF in observer)
   useEffect(() => {
@@ -1209,6 +1332,31 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const pickClosestToCenter = () => {
       const rect = scroller.getBoundingClientRect()
       const centerY = rect.top + rect.height / 2
+      const viewportTop = rect.top
+      const viewportBottom = rect.bottom
+      
+      // First, check if target verse is visible and should take priority (only before initial scroll is complete)
+      if (!hasScrolledToTarget && targetVerseFromUrl && Number.isFinite(targetVerseFromUrl)) {
+        const targetEl = verseRefs.current[`${currentChapter}-${targetVerseFromUrl}`]
+        if (targetEl) {
+          const targetRect = targetEl.getBoundingClientRect()
+          // If target verse is at least partially visible in viewport
+          if (targetRect.bottom > viewportTop && targetRect.top < viewportBottom) {
+            const c = Number(targetEl.dataset.chapter)
+            const v = Number(targetEl.dataset.verse || targetEl.dataset.paragraphId)
+            if (Number.isFinite(c) && Number.isFinite(v)) {
+              setActiveVerse(prev => (prev && prev.chapter === c && prev.verse === v) ? prev : { chapter: c, verse: v })
+              setActiveChapter(prevC => (prevC === c ? prevC : c))
+              setHasScrolledToTarget(true) // Mark that we've found the target verse
+              return // Exit early, target verse takes priority
+            }
+          } else {
+          }
+        } else {
+        }
+      }
+      
+      // Fallback to closest-to-center logic if target verse is not visible
       let best: { el: HTMLElement; dist: number } | null = null
       for (const el of elements) {
         const r = el.getBoundingClientRect()
@@ -1247,7 +1395,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       observer.disconnect()
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [chaptersData])
+  }, [chaptersData, targetVerseFromUrl, currentChapter, hasScrolledToTarget])
 
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
