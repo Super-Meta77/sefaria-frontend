@@ -339,6 +339,10 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           }
           anchorEl = el
         }
+        if (!anchorEl) {
+          // Fallbacks to ensure we have a stable anchor when prepending
+          anchorEl = verseRefs.current[`${activeChapter}-1`] || scroller.firstElementChild as HTMLElement | null
+        }
         if (anchorEl) {
           anchorOffset = anchorEl.offsetTop - scroller.scrollTop
         }
@@ -384,28 +388,115 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     let preloading = true
     const run = async () => {
       await fetchChapter(currentChapter)
-      if (cancelled) return
-      if (currentChapter > 1) {
-        await fetchChapter(currentChapter - 1)
+      // If there is a target verse, force viewport to top of the chapter first (no smooth)
+      if (!cancelled && initialTargetVerseRef.current != null) {
+        requestAnimationFrame(() => {
+          const sc = scrollerRef.current
+          const topEl = verseRefs.current[`${currentChapter}-1`]
+          if (sc && topEl) {
+            isProgrammaticScrollRef.current = true
+            sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
+            requestAnimationFrame(() => {
+              isProgrammaticScrollRef.current = false
+            })
+          }
+        })
       }
+      if (cancelled) return
+      // Do not preload previous chapter on initial mount to avoid prepending content shifting the viewport
       if (cancelled) return
       await fetchChapter(currentChapter + 1)
       preloading = false
+      
+      // After current and next are ready, smooth scroll to the target verse (if specified)
+      if (!cancelled && initialTargetVerseRef.current != null) {
+        const targetVerse = initialTargetVerseRef.current
+        requestAnimationFrame(() => {
+          const el = verseRefs.current[`${currentChapter}-${targetVerse}`]
+          const sc = scrollerRef.current
+          if (!el || !sc) return
+          isProgrammaticScrollRef.current = true
+          el.scrollIntoView({ behavior: "smooth", block: "start" })
+          setTimeout(() => {
+            isProgrammaticScrollRef.current = false
+          }, 900)
+        })
+      }
     }
     void run()
     return () => { cancelled = true }
   }, [book, currentChapter])
 
+  // After verses render, perform two-step scroll: jump to top of chapter, then smooth scroll to target verse
+  useEffect(() => {
+    if (hasDoneInitialScrollRef.current) return
+    const targetVerse = initialTargetVerseRef.current
+    if (targetVerse == null) return
+    const chapterData = chaptersData[currentChapter]
+    if (!chapterData || !chapterData.verses || chapterData.verses.length === 0) return
+
+    let attempts = 0
+    const maxAttempts = 10
+
+    const tryScroll = () => {
+      attempts++
+      const sc = scrollerRef.current
+      const topEl = verseRefs.current[`${currentChapter}-1`]
+      const verseEl = verseRefs.current[`${currentChapter}-${targetVerse}`]
+      if (!sc || !topEl || !verseEl) {
+        if (attempts < maxAttempts) {
+          requestAnimationFrame(tryScroll)
+        }
+        return
+      }
+      isProgrammaticScrollRef.current = true
+      // Step 1: immediately jump to top of chapter
+      sc.scrollTo({ top: topEl.offsetTop, behavior: "auto" })
+      // Step 2: smooth scroll to target verse on next frame
+      requestAnimationFrame(() => {
+        verseEl.scrollIntoView({ behavior: "smooth", block: "start" })
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false
+          hasDoneInitialScrollRef.current = true
+        }, 900)
+      })
+    }
+
+    requestAnimationFrame(tryScroll)
+  }, [chaptersData, currentChapter])
+
+  // Detect user scrolling to enable safe prepend of previous chapter later
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const onScroll = () => {
+      if (isProgrammaticScrollRef.current) return
+      if (scroller.scrollTop > 0) {
+        hasUserScrolledRef.current = true
+      }
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true } as any)
+    return () => {
+      scroller.removeEventListener('scroll', onScroll as any)
+    }
+  }, [])
+
   // When the currently displayed chapter changes, fetch its adjacents and prune state
   useEffect(() => {
     const run = async () => {
+      // Skip preloading on the very first run (initial mount) to avoid shifting content
+      if (!hasRunActiveChapterEffectOnceRef.current) {
+        hasRunActiveChapterEffectOnceRef.current = true
+        return
+      }
       if (!Number.isFinite(activeChapter)) return
       // Ensure active chapter is present (if navigated across boundary quickly)
       if (!chaptersData[activeChapter]?.verses?.length && !chaptersData[activeChapter]?.loading) {
         await fetchChapter(activeChapter)
       }
       // Fetch previous and next in background as needed
-      if (activeChapter > 1) {
+      // Only fetch previous once the user has scrolled to avoid initial prepend jumps
+      if (activeChapter > 1 && hasUserScrolledRef.current) {
         await fetchChapter(activeChapter - 1)
       }
       await fetchChapter(activeChapter + 1)
@@ -430,7 +521,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
 
   // Mock data for the study interface - in real app, this would be fetched based on params
   const currentText = {
-    title: `${book.charAt(0).toUpperCase() + book.slice(1)} ${chapter}`,
+    title: `${book.charAt(0).toUpperCase() + book.slice(1)} ${activeChapter}`,
     hebrew: "מאימתי קורין את שמע בערבית",
     translation: "From when do we recite the Shema in the evening?",
     content: [
@@ -556,6 +647,20 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const verseRefs = useRef<Record<string, HTMLElement | null>>({})
   const isProgrammaticScrollRef = useRef<boolean>(false)
+  const hasRunActiveChapterEffectOnceRef = useRef<boolean>(false)
+  const hasUserScrolledRef = useRef<boolean>(false)
+  const initialTargetVerseRef = useRef<number | null>(null)
+  const hasDoneInitialScrollRef = useRef<boolean>(false)
+
+  // Read verse target from hash if present (e.g., #21)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const hash = (window.location.hash || "").replace(/^#/, "").trim()
+    const maybeVerse = parseInt(hash, 10)
+    if (Number.isFinite(maybeVerse) && maybeVerse > 0) {
+      initialTargetVerseRef.current = maybeVerse
+    }
+  }, [])
 
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
 
@@ -931,7 +1036,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       try {
         setConnectionsError(null)
         const normalizedBook = book.charAt(0).toUpperCase() + book.slice(1)
-        const verseId = `${normalizedBook} ${currentChapter}:${selectedCardId}`
+        const verseId = `${normalizedBook} ${activeChapter}:${selectedCardId}`
         const data = await fetchConnectionsForVerse(verseId)
         setFilteredGraphData(data)
       } catch (e: any) {
@@ -943,7 +1048,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       }
     }
     loadConnections()
-  }, [connectionsModalOpen, selectedCardId, book, currentChapter])
+  }, [connectionsModalOpen, selectedCardId, book, activeChapter])
 
   // Synchronized scrolling effect
   useEffect(() => {
@@ -1080,12 +1185,20 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const target = `/${book}.${activeVerse.chapter}.${activeVerse.verse}`
     try {
       if (typeof window !== 'undefined') {
-        if (window.location.pathname !== target || window.location.hash) {
-          window.history.replaceState(null, "", target)
+        // If we're already at this path, replace instead of push to avoid history spam
+        if (window.location.pathname + window.location.hash !== target) {
+          const method = (window.history.state && window.history.state.idx > 0) ? 'replaceState' : 'pushState'
+          window.history[method as 'replaceState' | 'pushState']({}, '', target)
         }
       }
     } catch {}
   }, [activeVerse, book])
+
+  // Sync selected card for Dynamic Intertextual Graph with the scroll-detected active verse
+  useEffect(() => {
+    if (!activeVerse) return
+    setSelectedCardId(activeVerse.verse)
+  }, [activeVerse])
 
   // Detect active verse centered in the scroll container
   useEffect(() => {
@@ -1296,11 +1409,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
               </div>
 
               <div className="flex items-center space-x-6">
-                {activeVerse && (
-                  <div className="hidden sm:block text-sm text-slate-600">
-                    Now viewing: {book.charAt(0).toUpperCase() + book.slice(1)} {activeVerse.chapter}:{activeVerse.verse}
-                  </div>
-                )}
                 {/* Display Mode Controls - Segmented Control */}
                 <div className="relative inline-grid grid-cols-3 rounded-full border shadow-sm bg-gray-100 overflow-hidden">
                   {/* Sliding highlight */}
@@ -1617,7 +1725,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                       {selectedCardId !== null && (
                         <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                           <p className="text-md text-blue-800 font-medium">
-                            Selected: {book.charAt(0).toUpperCase() + book.slice(1)} {currentChapter}:{selectedCardId}
+                            Selected: {book.charAt(0).toUpperCase() + book.slice(1)} {activeChapter}:{selectedCardId}
                           </p>
                           <p className="text-sm text-blue-600 mt-1">
                             Click "Connections" to view relationships
