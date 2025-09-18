@@ -1398,7 +1398,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   }, [chaptersData, targetVerseFromUrl, currentChapter, hasScrolledToTarget])
 
   return (
-    <div className="h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
+    <div className="h-[calc(100vh-65px)] bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
       {/* Top sub-header under global header to show breadcrumb and controls */}
 
       <div className="flex-1 flex overflow-hidden">
