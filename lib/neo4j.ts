@@ -68,8 +68,7 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
     const result = await session.run(
       `MATCH (n {id: $id})-[r]-(connected)
        RETURN connected, type(r) AS relType,
-              CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir
-       LIMIT 200`,
+              CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir`,
       { id: verseId }
     )
 

@@ -12,6 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Slider } from "@/components/ui/slider"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator } from "@/components/ui/command"
 import AuthorMap from "@/components/AuthorMap"
 import LexicalHypergraph from "@/components/LexicalHypergraph"
 import CalendarDrawer from "@/components/CalendarDrawer"
@@ -724,7 +727,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false)
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(true)
   const [selectedNodePreview, setSelectedNodePreview] = useState<GraphNode | null>(null)
-  const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
+	const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
+	const [originalGraphData, setOriginalGraphData] = useState<GraphData>(emptyGraphData)
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false)
   const [connectionsError, setConnectionsError] = useState<string | null>(null)
   const [activeFilters, setActiveFilters] = useState({
@@ -732,6 +736,18 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     author: [] as string[],
     timePeriod: [] as string[]
   })
+	const currentYear = new Date().getFullYear()
+	const [yearRange, setYearRange] = useState<[number, number]>([0, currentYear])
+
+	const authorOptions = (() => {
+		const set = new Set<string>()
+		for (const n of originalGraphData.nodes || []) {
+			if (n.author) set.add(n.author)
+		}
+		return Array.from(set).sort((a, b) => a.localeCompare(b))
+	})()
+
+	const genreOptions = ["Halakhic", "Aggadic", "Lexical", "Responsa", "Commentary", "Mishnah"]
   // Time Period filter chips state
   const [selectedTimePeriods, setSelectedTimePeriods] = useState<string[]>(["Biblical","Tannaitic","Amoraic"]) // default selected
   const toggleTimePeriod = (value: string) => {
@@ -1143,13 +1159,31 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   // Fetch Neo4j connections when modal opens
   useEffect(() => {
     const loadConnections = async () => {
-      if (!connectionsModalOpen || selectedCardId == null) return
+    if (!connectionsModalOpen || selectedCardId == null) return
       try {
         setConnectionsError(null)
         const normalizedBook = book.charAt(0).toUpperCase() + book.slice(1)
         const verseId = `${normalizedBook} ${activeChapter}:${selectedCardId}`
         const data = await fetchConnectionsForVerse(verseId)
-        setFilteredGraphData(data)
+        setOriginalGraphData(data)
+        // initialize with current filters
+        const filtered = (() => {
+          const genres = activeFilters.genre
+          const authors = activeFilters.author
+          const [startYear, endYear] = yearRange
+          const nodes = data.nodes.filter(n => {
+            if (n.type === "current") return true
+            const genrePass = genres.length === 0 || (n.genre && genres.includes(capitalize(n.genre)))
+            const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
+            const year = parseNumericYear(n.timePeriod)
+            const timePass = year == null || (year >= startYear && year <= endYear)
+            return genrePass && authorPass && timePass
+          })
+          const idSet = new Set(nodes.map(n => n.id))
+          const links = data.links.filter(l => idSet.has(l.source as string) && idSet.has(l.target as string))
+          return { nodes, links }
+        })()
+        setFilteredGraphData(filtered)
       } catch (e: any) {
         setConnectionsError(e?.message || "Failed to load connections")
         // Keep empty on error
@@ -1160,6 +1194,43 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     }
     loadConnections()
   }, [connectionsModalOpen, selectedCardId, book, activeChapter])
+
+  // Apply filters whenever filters or original data change
+  useEffect(() => {
+    const data = originalGraphData
+    if (!data || !data.nodes || data.nodes.length === 0) return
+    const genres = activeFilters.genre
+    const authors = activeFilters.author
+    const [startYear, endYear] = yearRange
+    const nodes = data.nodes.filter(n => {
+      if (n.type === "current") return true
+      const genrePass = genres.length === 0 || (n.genre && genres.includes(capitalize(n.genre)))
+      const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
+      const year = parseNumericYear(n.timePeriod)
+      const timePass = year == null || (year >= startYear && year <= endYear)
+      return genrePass && authorPass && timePass
+    })
+    const idSet = new Set(nodes.map(n => n.id))
+    const links = data.links.filter(l => idSet.has(l.source as string) && idSet.has(l.target as string))
+    setFilteredGraphData({ nodes, links })
+  }, [originalGraphData, activeFilters, yearRange])
+
+  function parseNumericYear(period?: string): number | null {
+    if (!period) return null
+    // Try to parse direct year in string, e.g., "1200" or ranges like "1200-1300"
+    const m = period.match(/-?\d{1,4}/g)
+    if (!m || m.length === 0) return null
+    const nums = m.map(v => parseInt(v, 10)).filter(v => Number.isFinite(v))
+    if (nums.length === 0) return null
+    // if range, take midpoint
+    if (nums.length >= 2) return Math.round((nums[0] + nums[1]) / 2)
+    return nums[0]
+  }
+
+  function capitalize(s?: string): string {
+    if (!s) return ""
+    return s.charAt(0).toUpperCase() + s.slice(1)
+  }
 
   // Synchronized scrolling effect
   useEffect(() => {
@@ -2178,101 +2249,153 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                     initial={{ x: 300 }}
                     animate={{ x: 0 }}
                     exit={{ x: 300 }}
-                    className="w-80 bg-slate-50 border-l border-slate-200 p-4 overflow-y-auto"
+                    className="w-96 bg-white border-l border-slate-200 p-4 overflow-y-auto shadow-xl"
                   >
                     <h3 className="font-semibold text-slate-900 mb-4">Filters</h3>
                     
                     {/* Genre Filter */}
                     <div className="mb-6">
-                      <h4 className="font-medium text-slate-900 mb-3">Genre</h4>
-                      <div className="space-y-2">
-                        {["Halakhic", "Aggadic", "Lexical", "Responsa", "Commentary", "Mishnah"].map((genre) => (
-                          <div key={genre} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`genre-${genre}`}
-                              checked={activeFilters.genre.includes(genre)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    genre: [...prev.genre, genre]
-                                  }))
-                                } else {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    genre: prev.genre.filter(g => g !== genre)
-                                  }))
-                                }
-                              }}
-                            />
-                            <label htmlFor={`genre-${genre}`} className="text-sm text-slate-700">
-                              {genre}
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-slate-900">Genre</h4>
+                        <button
+                          className="text-xs text-blue-600 hover:underline"
+                          onClick={() => setActiveFilters(prev => ({ ...prev, genre: [] }))}
+                        >
+                          All
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {genreOptions.map((genre) => {
+                          const checked = activeFilters.genre.length === 0 || activeFilters.genre.includes(genre)
+                          return (
+                            <label key={genre} className={`flex items-center space-x-2 rounded-lg border px-3 py-2 text-sm transition ${checked ? "bg-blue-50 border-blue-200" : "bg-white hover:bg-slate-50 border-slate-200"}`}>
+                              <Checkbox
+                                id={`genre-${genre}`}
+                                checked={activeFilters.genre.includes(genre)}
+                                onCheckedChange={(isOn) => {
+                                  setActiveFilters(prev => {
+                                    if (isOn) return { ...prev, genre: Array.from(new Set([...prev.genre, genre])) }
+                                    return { ...prev, genre: prev.genre.filter(g => g !== genre) }
+                                  })
+                                }}
+                              />
+                              <span>{genre}</span>
                             </label>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
 
                     {/* Author Filter */}
                     <div className="mb-6">
-                      <h4 className="font-medium text-slate-900 mb-3">Author</h4>
-                      <div className="space-y-2">
-                        {["Rashi", "Rambam", "Tosafot", "R. Yosef Karo", "R. Shimon bar Yochai", "Tannaim"].map((author) => (
-                          <div key={author} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`author-${author}`}
-                              checked={activeFilters.author.includes(author)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    author: [...prev.author, author]
-                                  }))
-                                } else {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    author: prev.author.filter(a => a !== author)
-                                  }))
-                                }
-                              }}
-                            />
-                            <label htmlFor={`author-${author}`} className="text-sm text-slate-700">
-                              {author}
-                            </label>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-slate-900">Author</h4>
+                        <button
+                          className="text-xs text-blue-600 hover:underline"
+                          onClick={() => setActiveFilters(prev => ({ ...prev, author: [] }))}
+                        >
+                          All
+                        </button>
                       </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between">
+                            {activeFilters.author.length === 0 ? "All Authors" : `${activeFilters.author.length} selected`}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search authors…" />
+                            <CommandList>
+                              <CommandEmpty>No authors found.</CommandEmpty>
+                              <CommandGroup heading="Authors">
+                                <CommandItem
+                                  onSelect={() => setActiveFilters(prev => ({ ...prev, author: [] }))}
+                                >
+                                  All
+                                </CommandItem>
+                                <CommandSeparator />
+                                {authorOptions.map(author => (
+                                  <CommandItem
+                                    key={author}
+                                    onSelect={() => setActiveFilters(prev => {
+                                      const exists = prev.author.includes(author)
+                                      return { ...prev, author: exists ? prev.author.filter(a => a !== author) : [...prev.author, author] }
+                                    })}
+                                  >
+                                    <Checkbox className="mr-2" checked={activeFilters.author.includes(author)} />
+                                    {author}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     {/* Time Period Filter */}
                     <div className="mb-6">
-                      <h4 className="font-medium text-slate-900 mb-3">Time Period</h4>
-                      <div className="space-y-2">
-                        {["Tannaitic", "Medieval", "Early Modern"].map((period) => (
-                          <div key={period} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`period-${period}`}
-                              checked={activeFilters.timePeriod.includes(period)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    timePeriod: [...prev.timePeriod, period]
-                                  }))
-                                } else {
-                                  setActiveFilters(prev => ({
-                                    ...prev,
-                                    timePeriod: prev.timePeriod.filter(p => p !== period)
-                                  }))
-                                }
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-slate-900">Time Period</h4>
+                        <button
+                          className="text-xs text-blue-600 hover:underline"
+                          onClick={() => setYearRange([0, currentYear])}
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col">
+                            <label className="text-xs text-slate-600 mb-1">Start Year</label>
+                            <Input
+                              type="number"
+                              value={yearRange[0]}
+                              onChange={(e) => {
+                                const v = Number(e.target.value || 0)
+                                setYearRange(([_, end]) => [Math.min(v, end), end])
                               }}
                             />
-                            <label htmlFor={`period-${period}`} className="text-sm text-slate-700">
-                              {period}
-                            </label>
                           </div>
-                        ))}
+                          <div className="flex flex-col">
+                            <label className="text-xs text-slate-600 mb-1">End Year</label>
+                            <Input
+                              type="number"
+                              value={yearRange[1]}
+                              onChange={(e) => {
+                                const v = Number(e.target.value || 0)
+                                setYearRange(([start, _]) => [start, Math.max(v, start)])
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="px-1">
+                          <Slider
+                            min={0}
+                            max={currentYear}
+                            step={1}
+                            value={yearRange}
+                            onValueChange={(val: number[]) => {
+                              if (Array.isArray(val) && val.length === 2) {
+                                setYearRange([val[0], val[1]] as [number, number])
+                              }
+                            }}
+                          />
+                          <div className="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>{yearRange[0]}</span>
+                            <span>{yearRange[1]}</span>
+                          </div>
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-4 mt-6 flex justify-between">
+                      <Button variant="ghost" onClick={() => {
+                        setActiveFilters({ genre: [], author: [], timePeriod: [] })
+                        setYearRange([0, currentYear])
+                      }}>Clear All</Button>
+                      <Button onClick={() => setFilterDrawerOpen(false)}>Apply</Button>
                     </div>
                   </motion.div>
                 )}
@@ -2326,6 +2449,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                         onClick={() => {
                           // TODO: Load selected text into main view
+                          console.log("Open in Main View")
+                          console.log(selectedNodePreview)
                           setSelectedNodePreview(null)
                           setConnectionsModalOpen(false)
                           setSelectedCardId(null) // Clear selection when modal closes

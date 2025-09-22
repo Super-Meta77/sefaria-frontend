@@ -244,7 +244,7 @@ export default function CalendarDrawer({ open, onClose, todaysLearning }: Calend
                           type="button"
                           disabled={!c.day}
                           onClick={() => c.day && onSelectDate(c.day)}
-                          className={`h-9 rounded-md border text-center ${
+                          className={`h-[42px] w-[42px] rounded-sm border text-center ${
                             c.day ? (c.day === sel ? "bg-blue-600 text-white border-blue-600" : "hover:bg-slate-100 border-slate-200") : "border-transparent"
                           }`}
                         >
