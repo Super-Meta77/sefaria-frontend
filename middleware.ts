@@ -69,8 +69,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Pattern: /Book.Chapter
-  const bookChapterMatch = pathname.match(/^\/([^\/.]+)\.(\d+[a-z]?)\/?$/)
+  // Pattern: /Book.Chapter (supports mixed formats like 1:1, 1:2, 1a, 2b, etc.)
+  const bookChapterMatch = pathname.match(/^\/([^\/.]+)\.([^\/.]+)\/?$/)
   if (bookChapterMatch) {
     const bookSlug = bookChapterMatch[1]
     const chapter = bookChapterMatch[2]
@@ -91,8 +91,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Pattern: /Book.Chapter.Verse
-  const bookChapterVerseMatch = pathname.match(/^\/([^\/.]+)\.(\d+[a-z]?)\.(\d+)\/?$/)
+  // Pattern: /Book.Chapter.Verse (supports mixed chapter formats like 1:1, 1:2, 1a, 2b, etc.)
+  const bookChapterVerseMatch = pathname.match(/^\/([^\/.]+)\.([^\/.]+)\.(\d+)\/?$/)
   if (bookChapterVerseMatch) {
     const bookSlug = bookChapterVerseMatch[1]
     const chapter = bookChapterVerseMatch[2]

@@ -34,9 +34,12 @@ export type GraphNode = {
 export type GraphLink = {
   source: string
   target: string
-  type: "halakhic" | "aggadic" | "lexical" | "responsa"
+  type: "halakhic" | "aggadic" | "lexical" | "responsa" | string
   strength: number
   snippet?: string
+  category?: string
+  author?: string
+  timePeriod?: string
 }
 
 export type GraphData = {
@@ -67,10 +70,13 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
   try {
     const result = await session.run(
       `MATCH (n {id: $id})-[r]-(connected)
-       RETURN connected, type(r) AS relType,
-              CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir`,
+       RETURN connected, r AS rel, type(r) AS relType,
+              CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir
+       LIMIT 200`,
       { id: verseId }
     )
+
+    console.log(result);
 
     // Create a center node representing the selected verse
     const centerNode: GraphNode = {
@@ -89,6 +95,13 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       const neoNode = record.get("connected")
       if (!neoNode) continue
       const connectedNode = toGraphNode(neoNode)
+
+      // Map relationship properties onto node metadata for filtering
+      const rel: any = record.get("rel")
+      const relProps = (rel && rel.properties) || {}
+      if (relProps.category && !connectedNode.genre) connectedNode.genre = relProps.category
+      if (relProps.author_en && !connectedNode.author) connectedNode.author = relProps.author_en
+      if (relProps.timePeriod && !connectedNode.timePeriod) connectedNode.timePeriod = relProps.timePeriod
       if (!nodeById.has(connectedNode.id)) {
         nodeById.set(connectedNode.id, connectedNode)
         nodes.push(connectedNode)
@@ -97,11 +110,12 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       const dir = (record.get("dir") || "out").toString()
       const relTypeRaw = (record.get("relType") || "").toString().toLowerCase()
       const allowedLinkTypes = new Set(["halakhic","aggadic","lexical","responsa"]) as Set<GraphLink["type"]>
-      const mappedType = (allowedLinkTypes.has(relTypeRaw as any) ? relTypeRaw : "lexical") as GraphLink["type"]
+      const mappedType = (allowedLinkTypes.has(relTypeRaw as any) ? relTypeRaw : relTypeRaw || "lexical") as GraphLink["type"]
 
+      const relPropsForLink = (record.get("rel") && record.get("rel").properties) || {}
       const link: GraphLink = dir === "out"
-        ? { source: centerNode.id, target: connectedNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet }
-        : { source: connectedNode.id, target: centerNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet }
+        ? { source: centerNode.id, target: connectedNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet, category: relPropsForLink.category, author: relPropsForLink.author_en, timePeriod: relPropsForLink.timePeriod }
+        : { source: connectedNode.id, target: centerNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet, category: relPropsForLink.category, author: relPropsForLink.author_en, timePeriod: relPropsForLink.timePeriod }
       links.push(link)
     }
 

@@ -19,6 +19,7 @@ import AuthorMap from "@/components/AuthorMap"
 import LexicalHypergraph from "@/components/LexicalHypergraph"
 import CalendarDrawer from "@/components/CalendarDrawer"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import * as d3 from "d3"
 import SugyaLogicTree from "./SugyaLogicTree"
 import PsakLineageTimeline from "./PsakLineageTimeline"
@@ -38,7 +39,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
-  type: "halakhic" | "aggadic" | "lexical" | "responsa";
+  type: "halakhic" | "aggadic" | "lexical" | "responsa" | string;
   strength: number;
   snippet?: string;
 }
@@ -181,7 +182,7 @@ const computeTextDifferences = (text1: string, text2: string) => {
   const words1 = text1.split(/\s+/);
   const words2 = text2.split(/\s+/);
   
-  let i = 0, j = 0;
+  let i = 0, j = 0;                                                                                                                                                                                                                               
   let position = 0;
   
   while (i < words1.length || j < words2.length) {
@@ -240,7 +241,7 @@ interface ChapterData {
   verses: VerseData[];
   loading: boolean;
   error: string | null;
-  chapterNumber: number;
+  chapterNumber: number | string;
 }
 
 interface ChapterPageProps {
@@ -261,9 +262,10 @@ export default function ChapterPage({ params }: ChapterPageProps) {
 
 function ChapterPageInner({ params }: ChapterPageProps) {
   const { book, chapter, verse } = params
+  const router = useRouter()
 
   // State for chapter data
-  const [chaptersData, setChaptersData] = useState<{ [key: number]: ChapterData }>({});
+  const [chaptersData, setChaptersData] = useState<{ [key: number | string]: ChapterData }>({});
   const [displayMode, setDisplayMode] = useState<"hebrew" | "english" | "bilingual">("bilingual");
   // Refs for intersection observer
   const topTriggerRef = useRef<HTMLDivElement>(null);
@@ -276,21 +278,21 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const pathname = window.location.pathname;
     const hash = window.location.hash;
     
-    // Check for short format URLs like /Book.Chapter.Verse
-    const shortFormatMatch = pathname.match(/\/([^\/]+)\.(\d+[a-z]?)\.(\d+)\/?$/);
+    // Check for short format URLs like /Book.Chapter.Verse (supports mixed chapter formats)
+    const shortFormatMatch = pathname.match(/\/([^\/]+)\.([^\/.]+)\.(\d+)\/?$/);
     if (shortFormatMatch) {
       return {
-        chapter: parseInt(shortFormatMatch[2]),
+        chapter: shortFormatMatch[2], // Keep as string to preserve mixed formats
         verse: parseInt(shortFormatMatch[3])
       };
     }
     
-    // Check for short format URLs like /Book.Chapter
-    const shortChapterMatch = pathname.match(/\/([^\/]+)\.(\d+[a-z]?)\/?$/);
+    // Check for short format URLs like /Book.Chapter (supports mixed chapter formats)
+    const shortChapterMatch = pathname.match(/\/([^\/]+)\.([^\/.]+)\/?$/);
     if (shortChapterMatch) {
       const verseFromHash = hash ? parseInt(hash.replace('#', '')) : null;
       return {
-        chapter: parseInt(shortChapterMatch[2]),
+        chapter: shortChapterMatch[2], // Keep as string to preserve mixed formats
         verse: verseFromHash
       };
     }
@@ -301,7 +303,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       const chapterParam = pathParts[3];
       const verseFromHash = hash ? parseInt(hash.replace('#', '')) : null;
       return {
-        chapter: parseInt(chapterParam),
+        chapter: chapterParam, // Keep as string to preserve mixed formats
         verse: verseFromHash
       };
     }
@@ -312,13 +314,22 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   // Parse chapter and verse from URL - support formats like "chapter" or "chapter.verse"
   const parseChapterAndVerse = (chapterParam: string, verseParam: string) => {
     const parts = chapterParam.split('.');
-    const chapterNum = parseInt(parts[0]);
+    // For mixed formats like "1:1", "1:2", "1a", "2b", keep as string
+    // For pure numbers, convert to number for backward compatibility
+    const chapterValue = /^\d+$/.test(parts[0]) ? parseInt(parts[0]) : parts[0];
     const verseNum = verseParam ? parseInt(verseParam) : null;
-    return { chapter: chapterNum, verse: verseNum };
+    return { chapter: chapterValue, verse: verseNum };
+  };
+
+  // Helper function to get numeric chapter for arithmetic operations
+  const getNumericChapter = (chapter: number | string): number | null => {
+    if (typeof chapter === 'number') return chapter;
+    const match = chapter.match(/^(\d+)/);
+    return match ? parseInt(match[1]) : null;
   };
 
   // State to hold URL-parsed values
-  const [urlParsedData, setUrlParsedData] = useState<{ chapter: number | null; verse: number | null }>({ chapter: null, verse: null });
+  const [urlParsedData, setUrlParsedData] = useState<{ chapter: number | string | null; verse: number | null }>({ chapter: null, verse: null });
   // Track if we've completed the initial scroll to target verse
   const [hasScrolledToTarget, setHasScrolledToTarget] = useState(false);
 
@@ -334,8 +345,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const currentChapter = urlParsedData.chapter || routeChapter;
   const targetVerseFromUrl = urlParsedData.verse || routeVerse;
   // Active verse and chapter derived from viewport detection
-  const [activeVerse, setActiveVerse] = useState<{ chapter: number; verse: number } | null>(null)
-  const [activeChapter, setActiveChapter] = useState<number>(currentChapter)
+  const [activeVerse, setActiveVerse] = useState<{ chapter: number | string; verse: number } | null>(null)
+  const [activeChapter, setActiveChapter] = useState<number | string>(currentChapter)
 
   // Update activeChapter when URL-parsed data changes
   useEffect(() => {
@@ -345,9 +356,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   }, [urlParsedData.chapter]);
 
   // Function to fetch a single chapter
-  const fetchChapter = async (chapterNum: number) => {
+  const fetchChapter = async (chapterNum: number | string) => {
     // Skip invalid chapter numbers
-    if (chapterNum <= 0) {
+    if (typeof chapterNum === 'number' && chapterNum <= 0) {
       return;
     }
 
@@ -391,6 +402,18 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         verseNumber: index + 1,
         chapterNumber: chapterNum
       }));
+
+      // ===== PROCESSED VERSE DATA LOGGING =====
+      console.log("📖 [ChapterPage] ===== PROCESSED VERSE DATA =====");
+      console.log("📖 [ChapterPage] Number of verses:", combinedVerses.length);
+      console.log("📖 [ChapterPage] First verse structure:", {
+        verseNumber: combinedVerses[0]?.verseNumber,
+        chapterNumber: combinedVerses[0]?.chapterNumber,
+        hebrewLength: combinedVerses[0]?.hebrew?.length || 0,
+        englishLength: combinedVerses[0]?.english?.length || 0,
+        hebrewPreview: combinedVerses[0]?.hebrew?.substring(0, 50) || "No Hebrew",
+        englishPreview: combinedVerses[0]?.english?.substring(0, 50) || "No English"
+      });
 
       // If we're prepending content above the current view, preserve scroll position anchored to an element
       const scroller = scrollerRef.current
@@ -507,7 +530,10 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       if (cancelled) return
       // Do not preload previous chapter on initial mount to avoid prepending content shifting the viewport
       if (cancelled) return
-      await fetchChapter(currentChapter + 1)
+      const numericChapter = getNumericChapter(currentChapter);
+      if (numericChapter) {
+        await fetchChapter(numericChapter + 1)
+      }
       preloading = false
     }
     void run()
@@ -602,22 +628,27 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       }
       // Fetch previous and next in background as needed
       // Only fetch previous once the user has scrolled to avoid initial prepend jumps
-      if (activeChapter > 1 && hasUserScrolledRef.current) {
-        await fetchChapter(activeChapter - 1)
+      const numericActiveChapter = getNumericChapter(activeChapter);
+      if (numericActiveChapter && numericActiveChapter > 1 && hasUserScrolledRef.current) {
+        await fetchChapter(numericActiveChapter - 1)
       }
-      await fetchChapter(activeChapter + 1)
+      if (numericActiveChapter) {
+        await fetchChapter(numericActiveChapter + 1)
+      }
 
       // Delay pruning slightly to avoid visible drift after correction
       setTimeout(() => {
-        const allowed = new Set([activeChapter - 1, activeChapter, activeChapter + 1].filter(n => n > 0))
-        setChaptersData(prev => {
-          const next: typeof prev = {}
-          for (const k of Object.keys(prev)) {
-            const num = parseInt(k)
-            if (allowed.has(num)) next[num] = prev[num]
-          }
-          return next
-        })
+        if (numericActiveChapter) {
+          const allowed = new Set([numericActiveChapter - 1, numericActiveChapter, numericActiveChapter + 1].filter(n => n > 0))
+          setChaptersData(prev => {
+            const next: typeof prev = {}
+            for (const k of Object.keys(prev)) {
+              const num = parseInt(k)
+              if (allowed.has(num)) next[num] = prev[num]
+            }
+            return next
+          })
+        }
       }, 120)
     }
     void run()
@@ -727,7 +758,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false)
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(true)
   const [selectedNodePreview, setSelectedNodePreview] = useState<GraphNode | null>(null)
-	const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
+  const [filteredGraphData, setFilteredGraphData] = useState<GraphData>(emptyGraphData)
 	const [originalGraphData, setOriginalGraphData] = useState<GraphData>(emptyGraphData)
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false)
   const [connectionsError, setConnectionsError] = useState<string | null>(null)
@@ -747,7 +778,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
 		return Array.from(set).sort((a, b) => a.localeCompare(b))
 	})()
 
-	const genreOptions = ["Halakhic", "Aggadic", "Lexical", "Responsa", "Commentary", "Mishnah"]
+	const genreOptions = (() => {
+		const set = new Set<string>()
+		for (const n of originalGraphData.nodes || []) {
+			if (n.genre) set.add(n.genre)
+		}
+		return Array.from(set).sort((a, b) => a.localeCompare(b))
+	})()
   // Time Period filter chips state
   const [selectedTimePeriods, setSelectedTimePeriods] = useState<string[]>(["Biblical","Tannaitic","Amoraic"]) // default selected
   const toggleTimePeriod = (value: string) => {
@@ -756,6 +793,50 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       setActiveFilters((f: { genre: string[]; author: string[]; timePeriod: string[] }) => ({ ...f, timePeriod: next }))
       return next
     })
+  }
+
+  // Reset all filter states to default values
+  const resetFilterStates = () => {
+    setActiveFilters({
+      genre: [],
+      author: [],
+      timePeriod: []
+    })
+    setYearRange([0, currentYear])
+    setSelectedTimePeriods(["Biblical","Tannaitic","Amoraic"])
+    setSelectedNodePreview(null)
+    setFilterDrawerOpen(true) // Keep filter drawer open by default
+  }
+
+  // Parse node title and convert to URL path
+  const parseNodeTitleToPath = (title: string): string | null => {
+    if (!title) return null
+    
+    // Handle different title formats
+    // Examples: "Genesis 5:7" -> "/Genesis.5.7"
+    // "Targum Jonathan on Genesis 19:18" -> "/Targum_Jonathan_on_Genesis.19.18"
+    
+    // Split by space to separate book name from chapter:verse
+    const parts = title.trim().split(' ')
+    if (parts.length < 2) return null
+    
+    // Get the last part (chapter:verse) and the rest (book name)
+    const chapterVerse = parts[parts.length - 1]
+    const bookName = parts.slice(0, -1).join(' ')
+    
+    // Check if the last part contains chapter:verse format
+    const chapterVerseMatch = chapterVerse.match(/^(\d+):(\d+)$/)
+    if (!chapterVerseMatch) return null
+    
+    const [, chapter, verse] = chapterVerseMatch
+    
+    // Convert book name: capitalize each word and replace spaces with underscores
+    const bookPath = bookName
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('_')
+    
+    return `/${bookPath}.${chapter}.${verse}`
   }
   const graphRef = useRef<HTMLDivElement>(null)
   const svgSelectionRef = useRef<any>(null)
@@ -893,9 +974,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .selectAll("line")
       .data(centeredGraphData.links)
       .enter().append("line")
-      .attr("stroke", (d: GraphLink) => linkColors[d.type as keyof typeof linkColors])
-      .attr("stroke-width", (d: GraphLink) => d.strength * 1.5)
-      .attr("opacity", 0.6)
+      .attr("stroke", (d: GraphLink) => linkColors[d.type as keyof typeof linkColors] || "#64748b")
+      .attr("stroke-width", (d: GraphLink) => Math.max(1, d.strength * 1.5))
+      .attr("opacity", 0.75)
       .attr("marker-end", "url(#arrowhead)")
       .on("mouseover", function(this: SVGLineElement, event: any, d: GraphLink) {
         d3.select(this).attr("opacity", 1).attr("stroke-width", (d.strength * 1.5) + 1)
@@ -1159,30 +1240,78 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   // Fetch Neo4j connections when modal opens
   useEffect(() => {
     const loadConnections = async () => {
-    if (!connectionsModalOpen || selectedCardId == null) return
+      if (!connectionsModalOpen || selectedCardId == null) return
       try {
         setConnectionsError(null)
         const normalizedBook = book.charAt(0).toUpperCase() + book.slice(1)
         const verseId = `${normalizedBook} ${activeChapter}:${selectedCardId}`
+        console.log("🔗 [Connections] Fetching connections for verse:", verseId);
         const data = await fetchConnectionsForVerse(verseId)
+        
+        // ===== NEO4J CONNECTIONS DATA LOGGING =====
+        console.log("🔗 [Connections] ===== NEO4J CONNECTIONS DATA =====");
+        console.log("🔗 [Connections] Raw Neo4j data:", data);
+        console.log("🔗 [Connections] Number of nodes:", data.nodes?.length || 0);
+        console.log("🔗 [Connections] Number of links:", data.links?.length || 0);
+        
+        if (data.nodes && data.nodes.length > 0) {
+          console.log("🔗 [Connections] Node types:", data.nodes.map(n => n.type));
+          console.log("🔗 [Connections] First few nodes:", data.nodes.slice(0, 3).map(n => ({
+            id: n.id,
+            title: n.title,
+            type: n.type,
+            author: n.author,
+            timePeriod: n.timePeriod,
+            genre: n.genre,
+            snippet: n.snippet?.substring(0, 100) + "..."
+          })));
+        }
+        
+        if (data.links && data.links.length > 0) {
+          console.log("🔗 [Connections] Link types:", data.links.map(l => l.type));
+          console.log("🔗 [Connections] First few links:", data.links.slice(0, 3).map(l => ({
+            source: l.source,
+            target: l.target,
+            type: l.type,
+            strength: l.strength,
+            snippet: l.snippet?.substring(0, 100) + "..."
+          })));
+        }
+        
         setOriginalGraphData(data)
         // initialize with current filters
         const filtered = (() => {
           const genres = activeFilters.genre
           const authors = activeFilters.author
           const [startYear, endYear] = yearRange
-          const nodes = data.nodes.filter(n => {
+          const prelimNodes = data.nodes.filter(n => {
             if (n.type === "current") return true
-            const genrePass = genres.length === 0 || (n.genre && genres.includes(capitalize(n.genre)))
+            const genrePass = genres.length === 0 || (n.genre && genres.includes(n.genre))
             const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
             const year = parseNumericYear(n.timePeriod)
             const timePass = year == null || (year >= startYear && year <= endYear)
             return genrePass && authorPass && timePass
           })
-          const idSet = new Set(nodes.map(n => n.id))
-          const links = data.links.filter(l => idSet.has(l.source as string) && idSet.has(l.target as string))
+          // Keep links between prelim nodes
+          const prelimIdSet = new Set(prelimNodes.map(n => n.id))
+          const links = data.links.filter(l => prelimIdSet.has(l.source as string) && prelimIdSet.has(l.target as string))
+          // Prune nodes not referenced by any remaining link, except keep current node
+          const connectedIds = new Set<string>()
+          links.forEach(l => { connectedIds.add(l.source as string); connectedIds.add(l.target as string) })
+          const nodes = prelimNodes.filter(n => n.type === "current" || connectedIds.has(n.id))
           return { nodes, links }
         })()
+        
+        // ===== FILTERED GRAPH DATA LOGGING =====
+        console.log("🔗 [Connections] ===== FILTERED GRAPH DATA =====");
+        console.log("🔗 [Connections] Filtered nodes count:", filtered.nodes.length);
+        console.log("🔗 [Connections] Filtered links count:", filtered.links.length);
+        console.log("🔗 [Connections] Active filters:", {
+          genre: activeFilters.genre,
+          author: activeFilters.author,
+          yearRange: yearRange
+        });
+        
         setFilteredGraphData(filtered)
       } catch (e: any) {
         setConnectionsError(e?.message || "Failed to load connections")
@@ -1202,23 +1331,35 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const genres = activeFilters.genre
     const authors = activeFilters.author
     const [startYear, endYear] = yearRange
-    const nodes = data.nodes.filter(n => {
+    const prelimNodes = data.nodes.filter(n => {
       if (n.type === "current") return true
-      const genrePass = genres.length === 0 || (n.genre && genres.includes(capitalize(n.genre)))
+      const genrePass = genres.length === 0 || (n.genre && genres.includes(n.genre))
       const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
       const year = parseNumericYear(n.timePeriod)
       const timePass = year == null || (year >= startYear && year <= endYear)
       return genrePass && authorPass && timePass
     })
-    const idSet = new Set(nodes.map(n => n.id))
-    const links = data.links.filter(l => idSet.has(l.source as string) && idSet.has(l.target as string))
+    const prelimIdSet = new Set(prelimNodes.map(n => n.id))
+    const links = data.links.filter(l => prelimIdSet.has(l.source as string) && prelimIdSet.has(l.target as string))
+    const connectedIds = new Set<string>()
+    links.forEach(l => { connectedIds.add(l.source as string); connectedIds.add(l.target as string) })
+    const nodes = prelimNodes.filter(n => n.type === "current" || connectedIds.has(n.id))
     setFilteredGraphData({ nodes, links })
   }, [originalGraphData, activeFilters, yearRange])
 
-  function parseNumericYear(period?: string): number | null {
-    if (!period) return null
+  function parseNumericYear(period?: any): number | null {
+    if (period == null) return null
+    if (typeof period === "number" && Number.isFinite(period)) return period
+    if (Array.isArray(period)) {
+      for (const item of period) {
+        const y = parseNumericYear(item)
+        if (y != null) return y
+      }
+      return null
+    }
+    const str = String(period)
     // Try to parse direct year in string, e.g., "1200" or ranges like "1200-1300"
-    const m = period.match(/-?\d{1,4}/g)
+    const m = str.match(/-?\d{1,4}/g)
     if (!m || m.length === 0) return null
     const nums = m.map(v => parseInt(v, 10)).filter(v => Number.isFinite(v))
     if (nums.length === 0) return null
@@ -1330,13 +1471,14 @@ function ChapterPageInner({ params }: ChapterPageProps) {
 
     // Determine the chapter we should be on from activeChapter (driven by detection)
     const current = activeChapter
-    if (!Number.isFinite(current)) return
+    const numericCurrent = getNumericChapter(current)
+    if (!numericCurrent) return
 
     // Require prev (if >1), current, and next to be present
-    const needPrev = current > 1
-    const prevReady = needPrev ? !!chaptersData[current - 1]?.verses?.length : true
+    const needPrev = numericCurrent > 1
+    const prevReady = needPrev ? !!chaptersData[numericCurrent - 1]?.verses?.length : true
     const currReady = !!chaptersData[current]?.verses?.length
-    const nextReady = !!chaptersData[current + 1]?.verses?.length
+    const nextReady = !!chaptersData[numericCurrent + 1]?.verses?.length
     if (!(prevReady && currReady && nextReady)) return
 
     // Compute target - prioritize URL verse, then hash verse, then first verse
@@ -1373,10 +1515,19 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [chaptersData, activeChapter, targetVerseFromUrl])
 
+  // Helper function to capitalize each word in book name
+  const capitalizeBookName = (bookName: string): string => {
+    return bookName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('_')
+  }
+
   // Update URL when the detected active verse changes (debounced by rAF in observer)
   useEffect(() => {
     if (!activeVerse) return
-    const target = `/${book}.${activeVerse.chapter}.${activeVerse.verse}`
+    const capitalizedBook = capitalizeBookName(book)
+    const target = `/${capitalizedBook}.${activeVerse.chapter}.${activeVerse.verse}`
     try {
       if (typeof window !== 'undefined') {
         // If we're already at this path, replace instead of push to avoid history spam
@@ -1413,8 +1564,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           const targetRect = targetEl.getBoundingClientRect()
           // If target verse is at least partially visible in viewport
           if (targetRect.bottom > viewportTop && targetRect.top < viewportBottom) {
-            const c = Number(targetEl.dataset.chapter)
-            const v = Number(targetEl.dataset.verse || targetEl.dataset.paragraphId)
+            const c = Number(targetEl.dataset?.chapter)
+            const v = Number(targetEl.dataset?.verse || targetEl.dataset?.paragraphId)
             if (Number.isFinite(c) && Number.isFinite(v)) {
               setActiveVerse(prev => (prev && prev.chapter === c && prev.verse === v) ? prev : { chapter: c, verse: v })
               setActiveChapter(prevC => (prevC === c ? prevC : c))
@@ -1436,8 +1587,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         if (!best || dist < best.dist) best = { el, dist }
       }
       if (best) {
-        const c = Number(best.el.dataset.chapter)
-        const v = Number(best.el.dataset.verse || best.el.dataset.paragraphId)
+        const c = Number(best.el.dataset?.chapter)
+        const v = Number(best.el.dataset?.verse || best.el.dataset?.paragraphId)
         if (Number.isFinite(c) && Number.isFinite(v)) {
           setActiveVerse(prev => (prev && prev.chapter === c && prev.verse === v) ? prev : { chapter: c, verse: v })
           // If chapter changed, update activeChapter to drive adjacent preloading and pruning
@@ -2130,6 +2281,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
             onClick={() => {
               setConnectionsModalOpen(false)
               setSelectedCardId(null) // Clear selection when modal closes
+              resetFilterStates() // Reset all filter settings
             }}
           >
             <motion.div
@@ -2170,6 +2322,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                       onClick={() => {
                         setConnectionsModalOpen(false)
                         setSelectedCardId(null) // Clear selection when modal closes
+                        resetFilterStates() // Reset all filter settings
                       }}
                     >
                       <X className="w-4 h-4" />
@@ -2269,9 +2422,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                           const checked = activeFilters.genre.length === 0 || activeFilters.genre.includes(genre)
                           return (
                             <label key={genre} className={`flex items-center space-x-2 rounded-lg border px-3 py-2 text-sm transition ${checked ? "bg-blue-50 border-blue-200" : "bg-white hover:bg-slate-50 border-slate-200"}`}>
-                              <Checkbox
-                                id={`genre-${genre}`}
-                                checked={activeFilters.genre.includes(genre)}
+                            <Checkbox
+                              id={`genre-${genre}`}
+                              checked={activeFilters.genre.includes(genre)}
                                 onCheckedChange={(isOn) => {
                                   setActiveFilters(prev => {
                                     if (isOn) return { ...prev, genre: Array.from(new Set([...prev.genre, genre])) }
@@ -2296,11 +2449,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         >
                           All
                         </button>
-                      </div>
+                          </div>
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button variant="outline" className="w-full justify-between">
-                            {activeFilters.author.length === 0 ? "All Authors" : `${activeFilters.author.length} selected`}
+                            {activeFilters.author.length === 0
+                              ? "All Authors"
+                              : activeFilters.author.slice(0, 2).join(", ") + (activeFilters.author.length > 2 ? ` +${activeFilters.author.length - 2}` : "")}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-0" align="start">
@@ -2379,14 +2534,14 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                             onValueChange={(val: number[]) => {
                               if (Array.isArray(val) && val.length === 2) {
                                 setYearRange([val[0], val[1]] as [number, number])
-                              }
-                            }}
-                          />
+                                }
+                              }}
+                            />
                           <div className="flex justify-between text-xs text-slate-500 mt-1">
                             <span>{yearRange[0]}</span>
                             <span>{yearRange[1]}</span>
                           </div>
-                        </div>
+                      </div>
                       </div>
                     </div>
 
@@ -2401,67 +2556,86 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                 )}
               </AnimatePresence>
 
-              {/* Node Preview Pane */}
-              <AnimatePresence>
-                {selectedNodePreview && (
-                  <motion.div
-                    initial={{ x: -300 }}
-                    animate={{ x: 0 }}
-                    exit={{ x: -300 }}
-                    className="w-80 bg-white border-r border-slate-200 p-4"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-slate-900">Preview</h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedNodePreview(null)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-4">
+              {/* Node Preview Pane - always visible */}
+              <motion.div
+                initial={{ x: -300 }}
+                animate={{ x: 0 }}
+                exit={{ x: -300 }}
+                className="w-80 bg-white border-r border-slate-200 p-4"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-900">Preview</h3>
+                  {selectedNodePreview && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedNodePreview(null)}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="space-y-4">
+                  {selectedNodePreview ? (
+                    <>
                       <div>
                         <h4 className="font-medium text-slate-900">{selectedNodePreview.title}</h4>
                         <Badge variant="secondary" className="mt-1">
                           {selectedNodePreview.type}
                         </Badge>
                       </div>
-                      
                       <p className="text-sm text-slate-600">{selectedNodePreview.snippet}</p>
-                      
                       {selectedNodePreview.author && (
                         <div>
                           <span className="text-xs text-slate-500">Author: </span>
                           <span className="text-sm text-slate-700">{selectedNodePreview.author}</span>
                         </div>
                       )}
-                      
                       {selectedNodePreview.timePeriod && (
                         <div>
                           <span className="text-xs text-slate-500">Period: </span>
                           <span className="text-sm text-slate-700">{selectedNodePreview.timePeriod}</span>
                         </div>
                       )}
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <h4 className="font-medium text-slate-900">No node selected</h4>
+                        <p className="text-sm text-slate-600 mt-1">Select a node in the graph to see details here.</p>
+                      </div>
+                    </>
+                  )}
+                  <Button 
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={!selectedNodePreview}
+                    onClick={() => {
+                      if (!selectedNodePreview) return
                       
-                      <Button 
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        onClick={() => {
-                          // TODO: Load selected text into main view
-                          console.log("Open in Main View")
-                          console.log(selectedNodePreview)
-                          setSelectedNodePreview(null)
-                          setConnectionsModalOpen(false)
-                          setSelectedCardId(null) // Clear selection when modal closes
-                        }}
-                      >
-                        Open in Main View
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      // Parse the node title to get the URL path
+                      const targetPath = parseNodeTitleToPath(selectedNodePreview.title)
+                      
+                      if (targetPath) {
+                        // Navigate to the parsed path
+                        router.push(targetPath)
+                      } else {
+                        // Fallback: log error and show alert for debugging
+                        console.error("Could not parse node title:", selectedNodePreview.title)
+                        alert(`Could not navigate to: ${selectedNodePreview.title}`)
+                      }
+                      
+                      // Close modal and reset states
+                      setSelectedNodePreview(null)
+                      setConnectionsModalOpen(false)
+                      setSelectedCardId(null) // Clear selection when modal closes
+                      resetFilterStates() // Reset all filter settings
+                    }}
+                  >
+                    Open in Main View
+                  </Button>
+                </div>
+              </motion.div>
             </motion.div>
           </motion.div>
         )}
