@@ -29,19 +29,37 @@ import { fetchConnectionsForVerse } from "@/lib/neo4j"
 interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   title: string;
-  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah";
+  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah" | "talmud" | "kabbalah";
   snippet: string;
-  author?: string;
-  timePeriod?: string;
-  genre?: string;
+  content?: string;
+  url?: string;
+  color?: string;
+  metadata: {
+    genre?: string;
+    author?: string;
+    timePeriod?: string;
+  };
+  simulation?: {
+    x?: number;
+    y?: number;
+    vx?: number;
+    vy?: number;
+    fx?: number | null;
+    fy?: number | null;
+  };
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+  id: string;
   source: string | GraphNode;
   target: string | GraphNode;
-  type: "halakhic" | "aggadic" | "lexical" | "responsa" | string;
+  type: "explicit";
   strength: number;
-  snippet?: string;
+  weight?: number;
+  simulation?: {
+    index?: number;
+    distance?: number;
+  };
 }
 
 interface GraphData {
@@ -403,18 +421,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         chapterNumber: chapterNum
       }));
 
-      // ===== PROCESSED VERSE DATA LOGGING =====
-      console.log("📖 [ChapterPage] ===== PROCESSED VERSE DATA =====");
-      console.log("📖 [ChapterPage] Number of verses:", combinedVerses.length);
-      console.log("📖 [ChapterPage] First verse structure:", {
-        verseNumber: combinedVerses[0]?.verseNumber,
-        chapterNumber: combinedVerses[0]?.chapterNumber,
-        hebrewLength: combinedVerses[0]?.hebrew?.length || 0,
-        englishLength: combinedVerses[0]?.english?.length || 0,
-        hebrewPreview: combinedVerses[0]?.hebrew?.substring(0, 50) || "No Hebrew",
-        englishPreview: combinedVerses[0]?.english?.substring(0, 50) || "No English"
-      });
-
       // If we're prepending content above the current view, preserve scroll position anchored to an element
       const scroller = scrollerRef.current
       const shouldAdjustScroll = !!scroller && chapterNum < activeChapter
@@ -769,11 +775,12 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   })
 	const currentYear = new Date().getFullYear()
 	const [yearRange, setYearRange] = useState<[number, number]>([0, currentYear])
+	const [defaultYearRange, setDefaultYearRange] = useState<[number, number]>([0, currentYear])
 
 	const authorOptions = (() => {
 		const set = new Set<string>()
 		for (const n of originalGraphData.nodes || []) {
-			if (n.author) set.add(n.author)
+			if (n.metadata.author) set.add(n.metadata.author)
 		}
 		return Array.from(set).sort((a, b) => a.localeCompare(b))
 	})()
@@ -781,7 +788,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
 	const genreOptions = (() => {
 		const set = new Set<string>()
 		for (const n of originalGraphData.nodes || []) {
-			if (n.genre) set.add(n.genre)
+			if (n.metadata.genre) set.add(n.metadata.genre)
 		}
 		return Array.from(set).sort((a, b) => a.localeCompare(b))
 	})()
@@ -802,7 +809,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       author: [],
       timePeriod: []
     })
-    setYearRange([0, currentYear])
+    setYearRange(defaultYearRange)
     setSelectedTimePeriods(["Biblical","Tannaitic","Amoraic"])
     setSelectedNodePreview(null)
     setFilterDrawerOpen(true) // Keep filter drawer open by default
@@ -914,14 +921,16 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       .attr("fill", "#64748b")
 
     // Color scales
-    const nodeColors = {
+    const nodeColors: Record<GraphNode["type"], string> = {
       current: "#3b82f6", // blue
       halakhic: "#2563eb", // blue per spec
       aggadic: "#dc2626", // red
       lexical: "#6b7280", // gray
       responsa: "#10b981", // green
       commentary: "#8b5cf6",
-      mishnah: "#f59e0b"
+      mishnah: "#f59e0b",
+      talmud: "#1e40af", // dark blue
+      kabbalah: "#dc2626" // red
     }
 
     const linkColors = {
@@ -945,12 +954,22 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       return `#${toHex(lr)}${toHex(lg)}${toHex(lb)}`
     }
 
+    // Find the current node and position it at center initially
+    const currentNode = centeredGraphData.nodes.find(n => n.type === "current")
+    const otherNodes = centeredGraphData.nodes.filter(n => n.type !== "current")
+    
+    // Position current node at center initially, but allow it to be dragged
+    if (currentNode) {
+      currentNode.x = width / 2
+      currentNode.y = height / 2
+      // Don't set fx/fy to allow dragging
+    }
+
     // Create force simulation
     const simulation = d3.forceSimulation(centeredGraphData.nodes as d3.SimulationNodeDatum[])
-      .force("link", d3.forceLink(centeredGraphData.links).id((d: any) => d.id).distance(100))
-      .force("charge", d3.forceManyBody().strength(-300))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(30))
+      .force("link", d3.forceLink(centeredGraphData.links).id((d: any) => d.id).distance(120))
+      .force("charge", d3.forceManyBody().strength(-400))
+      .force("collision", d3.forceCollide().radius(35))
 
     // Pre-tick the simulation to settle positions before rendering (no initial animation)
     simulation.stop()
@@ -1047,7 +1066,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       tooltip.html(`
         <div><strong>${d.title}</strong></div>
         <div>${d.snippet}</div>
-        ${d.author ? `<div><em>Author: ${d.author}</em></div>` : ''}
+        ${d.metadata.author ? `<div><em>Author: ${d.metadata.author}</em></div>` : ''}
       `)
       
       tooltip.style("left", (event.pageX + 10) + "px")
@@ -1260,9 +1279,9 @@ function ChapterPageInner({ params }: ChapterPageProps) {
             id: n.id,
             title: n.title,
             type: n.type,
-            author: n.author,
-            timePeriod: n.timePeriod,
-            genre: n.genre,
+            author: n.metadata.author,
+            timePeriod: n.metadata.timePeriod,
+            genre: n.metadata.genre,
             snippet: n.snippet?.substring(0, 100) + "..."
           })));
         }
@@ -1270,35 +1289,97 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         if (data.links && data.links.length > 0) {
           console.log("🔗 [Connections] Link types:", data.links.map(l => l.type));
           console.log("🔗 [Connections] First few links:", data.links.slice(0, 3).map(l => ({
+            id: l.id,
             source: l.source,
             target: l.target,
             type: l.type,
-            strength: l.strength,
-            snippet: l.snippet?.substring(0, 100) + "..."
+            strength: l.strength
           })));
         }
         
-        setOriginalGraphData(data)
+        setOriginalGraphData(data as any)
+        
+        // Compute dynamic year range from node metadata
+        let minYear = Infinity
+        let maxYear = -Infinity
+        if (data.nodes && data.nodes.length > 0) {
+          data.nodes.forEach(node => {
+            const year = parseNumericYear(node.metadata?.timePeriod)
+            if (year != null) {
+              minYear = Math.min(minYear, year)
+              maxYear = Math.max(maxYear, year)
+            }
+          })
+        }
+        
+        // Set computed year range as default (only if valid years were found)
+        if (minYear !== Infinity && maxYear !== -Infinity) {
+          const computedRange: [number, number] = [minYear, maxYear]
+          console.log("🔗 [Connections] Computed year range from nodes:", computedRange)
+          setYearRange(computedRange)
+          setDefaultYearRange(computedRange)
+        }
+        
         // initialize with current filters
         const filtered = (() => {
           const genres = activeFilters.genre
           const authors = activeFilters.author
-          const [startYear, endYear] = yearRange
+          const [startYear, endYear] = minYear !== Infinity && maxYear !== -Infinity 
+            ? [minYear, maxYear] 
+            : yearRange
           const prelimNodes = data.nodes.filter(n => {
             if (n.type === "current") return true
-            const genrePass = genres.length === 0 || (n.genre && genres.includes(n.genre))
-            const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
-            const year = parseNumericYear(n.timePeriod)
+            const genrePass = genres.length === 0 || (n.metadata.genre && genres.includes(n.metadata.genre))
+            const authorPass = authors.length === 0 || (n.metadata.author && authors.includes(n.metadata.author))
+            const year = parseNumericYear(n.metadata.timePeriod)
             const timePass = year == null || (year >= startYear && year <= endYear)
             return genrePass && authorPass && timePass
           })
-          // Keep links between prelim nodes
-          const prelimIdSet = new Set(prelimNodes.map(n => n.id))
-          const links = data.links.filter(l => prelimIdSet.has(l.source as string) && prelimIdSet.has(l.target as string))
-          // Prune nodes not referenced by any remaining link, except keep current node
-          const connectedIds = new Set<string>()
-          links.forEach(l => { connectedIds.add(l.source as string); connectedIds.add(l.target as string) })
-          const nodes = prelimNodes.filter(n => n.type === "current" || connectedIds.has(n.id))
+          
+          // Keep all filtered nodes
+          const nodes = prelimNodes
+          
+          // Show only links between center node and filtered nodes
+          const currentNodeIds = new Set(nodes.filter(n => n.type === "current").map(n => n.id))
+          const filteredNodeIds = new Set(nodes.map(n => n.id))
+          
+          console.log("🔗 [Initial Debug] Current node IDs:", Array.from(currentNodeIds))
+          console.log("🔗 [Initial Debug] Filtered node IDs:", Array.from(filteredNodeIds))
+          console.log("🔗 [Initial Debug] Total nodes:", nodes.length)
+          console.log("🔗 [Initial Debug] Original links count:", data.links.length)
+          console.log("🔗 [Initial Debug] Sample original links:", data.links.slice(0, 3).map(l => ({ 
+            source: l.source, 
+            target: l.target, 
+            sourceType: typeof l.source,
+            targetType: typeof l.target
+          })))
+          
+          const links = data.links.filter(l => {
+            const sourceId = l.source as string
+            const targetId = l.target as string
+            const hasCurrentAsSource = currentNodeIds.has(sourceId)
+            const hasCurrentAsTarget = currentNodeIds.has(targetId)
+            const hasFilteredAsSource = filteredNodeIds.has(sourceId)
+            const hasFilteredAsTarget = filteredNodeIds.has(targetId)
+            
+            const shouldInclude = (hasCurrentAsSource && hasFilteredAsTarget) ||
+                                 (hasCurrentAsTarget && hasFilteredAsSource)
+            
+            console.log(`🔗 [Initial Debug] Link ${sourceId}↔${targetId}:`, {
+              hasCurrentAsSource,
+              hasCurrentAsTarget,
+              hasFilteredAsSource,
+              hasFilteredAsTarget,
+              shouldInclude
+            })
+            
+            // Show link if it connects center node to any filtered node
+            return shouldInclude
+          })
+          
+          console.log("🔗 [Initial Debug] Final filtered links count:", links.length)
+          console.log("🔗 [Initial Debug] Final links:", links.map(l => ({ source: l.source, target: l.target })))
+          
           return { nodes, links }
         })()
         
@@ -1312,7 +1393,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           yearRange: yearRange
         });
         
-        setFilteredGraphData(filtered)
+        setFilteredGraphData(filtered as any)
       } catch (e: any) {
         setConnectionsError(e?.message || "Failed to load connections")
         // Keep empty on error
@@ -1333,17 +1414,57 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const [startYear, endYear] = yearRange
     const prelimNodes = data.nodes.filter(n => {
       if (n.type === "current") return true
-      const genrePass = genres.length === 0 || (n.genre && genres.includes(n.genre))
-      const authorPass = authors.length === 0 || (n.author && authors.includes(n.author))
-      const year = parseNumericYear(n.timePeriod)
+      const genrePass = genres.length === 0 || (n.metadata.genre && genres.includes(n.metadata.genre))
+      const authorPass = authors.length === 0 || (n.metadata.author && authors.includes(n.metadata.author))
+      const year = parseNumericYear(n.metadata.timePeriod)
       const timePass = year == null || (year >= startYear && year <= endYear)
       return genrePass && authorPass && timePass
     })
-    const prelimIdSet = new Set(prelimNodes.map(n => n.id))
-    const links = data.links.filter(l => prelimIdSet.has(l.source as string) && prelimIdSet.has(l.target as string))
-    const connectedIds = new Set<string>()
-    links.forEach(l => { connectedIds.add(l.source as string); connectedIds.add(l.target as string) })
-    const nodes = prelimNodes.filter(n => n.type === "current" || connectedIds.has(n.id))
+    
+    // Keep all filtered nodes
+    const nodes = prelimNodes
+    
+    // Show only links between center node and filtered nodes
+    const currentNodeIds = new Set(nodes.filter(n => n.type === "current").map(n => n.id))
+    const filteredNodeIds = new Set(nodes.map(n => n.id))
+    
+    console.log("🔗 [Link Debug] Current node IDs:", Array.from(currentNodeIds))
+    console.log("🔗 [Link Debug] Filtered node IDs:", Array.from(filteredNodeIds))
+    console.log("🔗 [Link Debug] Total nodes:", nodes.length)
+    console.log("🔗 [Link Debug] Original links count:", data.links.length)
+    console.log("🔗 [Link Debug] Sample original links:", data.links.slice(0, 3).map(l => ({ 
+      source: l.source, 
+      target: l.target, 
+      sourceType: typeof l.source,
+      targetType: typeof l.target
+    })))
+    
+    const links = data.links.filter(l => {
+      const sourceId = l.source as string
+      const targetId = l.target as string
+      const hasCurrentAsSource = currentNodeIds.has(sourceId)
+      const hasCurrentAsTarget = currentNodeIds.has(targetId)
+      const hasFilteredAsSource = filteredNodeIds.has(sourceId)
+      const hasFilteredAsTarget = filteredNodeIds.has(targetId)
+      
+      const shouldInclude = (hasCurrentAsSource && hasFilteredAsTarget) ||
+                           (hasCurrentAsTarget && hasFilteredAsSource)
+      
+      console.log(`🔗 [Link Debug] Link ${sourceId}↔${targetId}:`, {
+        hasCurrentAsSource,
+        hasCurrentAsTarget,
+        hasFilteredAsSource,
+        hasFilteredAsTarget,
+        shouldInclude
+      })
+      
+      // Show link if it connects center node to any filtered node
+      return shouldInclude
+    })
+    
+    console.log("🔗 [Link Debug] Final filtered links count:", links.length)
+    console.log("🔗 [Link Debug] Final links:", links.map(l => ({ source: l.source, target: l.target })))
+    
     setFilteredGraphData({ nodes, links })
   }, [originalGraphData, activeFilters, yearRange])
 
@@ -2495,7 +2616,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         <h4 className="font-medium text-slate-900">Time Period</h4>
                         <button
                           className="text-xs text-blue-600 hover:underline"
-                          onClick={() => setYearRange([0, currentYear])}
+                          onClick={() => setYearRange(defaultYearRange)}
                         >
                           Reset
                         </button>
@@ -2548,7 +2669,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                     <div className="border-t border-slate-200 pt-4 mt-6 flex justify-between">
                       <Button variant="ghost" onClick={() => {
                         setActiveFilters({ genre: [], author: [], timePeriod: [] })
-                        setYearRange([0, currentYear])
+                        setYearRange(defaultYearRange)
                       }}>Clear All</Button>
                       <Button onClick={() => setFilterDrawerOpen(false)}>Apply</Button>
                     </div>
@@ -2586,16 +2707,16 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         </Badge>
                       </div>
                       <p className="text-sm text-slate-600">{selectedNodePreview.snippet}</p>
-                      {selectedNodePreview.author && (
+                      {selectedNodePreview.metadata.author && (
                         <div>
                           <span className="text-xs text-slate-500">Author: </span>
-                          <span className="text-sm text-slate-700">{selectedNodePreview.author}</span>
+                          <span className="text-sm text-slate-700">{selectedNodePreview.metadata.author}</span>
                         </div>
                       )}
-                      {selectedNodePreview.timePeriod && (
+                      {selectedNodePreview.metadata.timePeriod && (
                         <div>
                           <span className="text-xs text-slate-500">Period: </span>
-                          <span className="text-sm text-slate-700">{selectedNodePreview.timePeriod}</span>
+                          <span className="text-sm text-slate-700">{selectedNodePreview.metadata.timePeriod}</span>
                         </div>
                       )}
                     </>

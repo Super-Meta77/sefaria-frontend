@@ -22,24 +22,45 @@ function getDriver(): Driver {
 }
 
 export type GraphNode = {
-  id: string
+  id: string // Uniquely identifies each GraphNode. Example: Node-1, Node-2, Node-3, ...
   title: string
-  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah"
+  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah" | "talmud" | "kabbalah"
+    
   snippet: string
-  author?: string
-  timePeriod?: string
-  genre?: string
+  content?: string // Full text content
+  url?: string
+
+  color?: string
+
+  metadata: {
+    genre?: string
+    author?: string
+    timePeriod?: string
+  }
+
+  simulation?: {
+    x?: number
+    y?: number
+    vx?: number
+    vy?: number
+    fx?: number | null
+    fy?: number | null
+  }
 }
 
 export type GraphLink = {
-  source: string
-  target: string
-  type: "halakhic" | "aggadic" | "lexical" | "responsa" | string
+  id: string // Uniquely identifies each GraphLink. Example: Link-1, Link-2, Link-3, ...
+  source: string | GraphNode // ID of Source GraphNode or node object after D3 processes
+  target: string | GraphNode // ID of Target GraphNode or node object after D3 processes
+  type: "explicit"
+  
   strength: number
-  snippet?: string
-  category?: string
-  author?: string
-  timePeriod?: string
+  weight?: number
+
+  simulation?: {
+    index?: number
+    distance?: number
+  }
 }
 
 export type GraphData = {
@@ -51,16 +72,21 @@ function toGraphNode(node: any): GraphNode {
   const props = (node && node.properties) || {}
   const title = props.title || props.id || "Unknown"
   const rawType = (props.type || "commentary").toString().toLowerCase()
-  const allowedTypes = ["current","halakhic","aggadic","lexical","responsa","commentary","mishnah"] as const
+  const allowedTypes = ["current","halakhic","aggadic","lexical","responsa","commentary","mishnah","talmud","kabbalah"] as const
   const normalizedType = (allowedTypes.includes(rawType as any) ? rawType : "commentary") as GraphNode["type"]
   return {
     id: props.id || title,
     title,
     type: normalizedType,
     snippet: props.snippet || props.summary || "",
-    author: props.author || undefined,
-    timePeriod: props.timePeriod || props.period || undefined,
-    genre: props.genre || undefined,
+    content: props.content || props.fullText || undefined,
+    url: props.url || undefined,
+    color: props.color || undefined,
+    metadata: {
+      author: props.author || undefined,
+      timePeriod: props.timePeriod || props.period || undefined,
+      genre: props.genre || undefined,
+    },
   }
 }
 
@@ -72,7 +98,7 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       `MATCH (n {id: $id})-[r]-(connected)
        RETURN connected, r AS rel, type(r) AS relType,
               CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir
-       LIMIT 200`,
+       LIMIT 20`,
       { id: verseId }
     )
 
@@ -84,12 +110,15 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       title: verseId,
       type: "current",
       snippet: "Selected verse",
+      metadata: {},
     }
 
     const nodes: GraphNode[] = [centerNode]
     const links: GraphLink[] = []
     const nodeById = new Map<string, GraphNode>()
     nodeById.set(centerNode.id, centerNode)
+
+    let linkIdCounter = 0
 
     for (const record of result.records) {
       const neoNode = record.get("connected")
@@ -99,23 +128,37 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       // Map relationship properties onto node metadata for filtering
       const rel: any = record.get("rel")
       const relProps = (rel && rel.properties) || {}
-      if (relProps.category && !connectedNode.genre) connectedNode.genre = relProps.category
-      if (relProps.author_en && !connectedNode.author) connectedNode.author = relProps.author_en
-      if (relProps.timePeriod && !connectedNode.timePeriod) connectedNode.timePeriod = relProps.timePeriod
+      if (relProps.category && !connectedNode.metadata.genre) {
+        connectedNode.metadata.genre = relProps.category
+      }
+      if (relProps.author_en && !connectedNode.metadata.author) {
+        connectedNode.metadata.author = relProps.author_en
+      }
+      if (relProps.timePeriod && !connectedNode.metadata.timePeriod) {
+        connectedNode.metadata.timePeriod = relProps.timePeriod
+      }
       if (!nodeById.has(connectedNode.id)) {
         nodeById.set(connectedNode.id, connectedNode)
         nodes.push(connectedNode)
       }
 
       const dir = (record.get("dir") || "out").toString()
-      const relTypeRaw = (record.get("relType") || "").toString().toLowerCase()
-      const allowedLinkTypes = new Set(["halakhic","aggadic","lexical","responsa"]) as Set<GraphLink["type"]>
-      const mappedType = (allowedLinkTypes.has(relTypeRaw as any) ? relTypeRaw : relTypeRaw || "lexical") as GraphLink["type"]
-
-      const relPropsForLink = (record.get("rel") && record.get("rel").properties) || {}
+      
       const link: GraphLink = dir === "out"
-        ? { source: centerNode.id, target: connectedNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet, category: relPropsForLink.category, author: relPropsForLink.author_en, timePeriod: relPropsForLink.timePeriod }
-        : { source: connectedNode.id, target: centerNode.id, type: mappedType, strength: 0.7, snippet: connectedNode.snippet, category: relPropsForLink.category, author: relPropsForLink.author_en, timePeriod: relPropsForLink.timePeriod }
+        ? { 
+            id: `link-${linkIdCounter++}`, 
+            source: centerNode.id, 
+            target: connectedNode.id, 
+            type: "explicit", 
+            strength: 0.7 
+          }
+        : { 
+            id: `link-${linkIdCounter++}`, 
+            source: connectedNode.id, 
+            target: centerNode.id, 
+            type: "explicit", 
+            strength: 0.7 
+          }
       links.push(link)
     }
 
@@ -128,5 +171,3 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
     // Keep driver open and cached for reuse
   }
 }
-
-

@@ -6,19 +6,37 @@ import * as d3 from 'd3'
 interface GraphNode {
   id: string;
   title: string;
-  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah";
+  type: "current" | "halakhic" | "aggadic" | "lexical" | "responsa" | "commentary" | "mishnah" | "talmud" | "kabbalah";
   snippet: string;
-  author?: string;
-  timePeriod?: string;
-  genre?: string;
+  content?: string;
+  url?: string;
+  color?: string;
+  metadata: {
+    genre?: string;
+    author?: string;
+    timePeriod?: string;
+  };
+  simulation?: {
+    x?: number;
+    y?: number;
+    vx?: number;
+    vy?: number;
+    fx?: number | null;
+    fy?: number | null;
+  };
 }
 
 interface GraphLink {
-  source: string;
-  target: string;
-  type: "halakhic" | "aggadic" | "lexical" | "responsa";
+  id: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
+  type: "explicit";
   strength: number;
-  snippet?: string;
+  weight?: number;
+  simulation?: {
+    index?: number;
+    distance?: number;
+  };
 }
 
 interface GraphData {
@@ -46,22 +64,16 @@ export default function D3Graph({ data, onNodeClick, onLinkHover }: D3GraphProps
     const height = svgRef.current.clientHeight
 
     // Color scale for node types
-    const nodeColors = {
+    const nodeColors: Record<GraphNode["type"], string> = {
       current: "#3b82f6",
       halakhic: "#059669",
       aggadic: "#dc2626",
       lexical: "#6b7280",
       responsa: "#10b981",
       commentary: "#8b5cf6",
-      mishnah: "#f59e0b"
-    }
-
-    // Color scale for link types
-    const linkColors = {
-      halakhic: "#059669",
-      aggadic: "#dc2626",
-      lexical: "#6b7280",
-      responsa: "#10b981"
+      mishnah: "#f59e0b",
+      talmud: "#1e40af",
+      kabbalah: "#dc2626"
     }
 
     // Create force simulation
@@ -76,7 +88,7 @@ export default function D3Graph({ data, onNodeClick, onLinkHover }: D3GraphProps
       .selectAll("line")
       .data(data.links)
       .enter().append("line")
-      .attr("stroke", (d: any) => linkColors[d.type])
+      .attr("stroke", "#6b7280")
       .attr("stroke-width", (d: any) => d.strength * 3)
       .attr("opacity", 0.6)
       .on("mouseover", function(event, d: any) {
