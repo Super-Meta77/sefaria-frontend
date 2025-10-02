@@ -1300,24 +1300,30 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         setOriginalGraphData(data as any)
         
         // Compute dynamic year range from node metadata
-        let minYear = Infinity
-        let maxYear = -Infinity
+        let allYears: number[] = []
         if (data.nodes && data.nodes.length > 0) {
           data.nodes.forEach(node => {
-            const year = parseNumericYear(node.metadata?.timePeriod)
-            if (year != null) {
-              minYear = Math.min(minYear, year)
-              maxYear = Math.max(maxYear, year)
-            }
+            allYears.push(...extractAllYears(node.metadata?.timePeriod))
           })
         }
-        
+        const minYear = allYears.length > 0 ? Math.min(...allYears) : Infinity
+        const maxYear = allYears.length > 0 ? Math.max(...allYears) : -Infinity
         // Set computed year range as default (only if valid years were found)
         if (minYear !== Infinity && maxYear !== -Infinity) {
           const computedRange: [number, number] = [minYear, maxYear]
           console.log("🔗 [Connections] Computed year range from nodes:", computedRange)
-          setYearRange(computedRange)
           setDefaultYearRange(computedRange)
+          // Only set yearRange if it's the first load or out of bounds
+          setYearRange(prev => {
+            if (
+              prev[0] < computedRange[0] ||
+              prev[1] > computedRange[1] ||
+              (prev[0] === 0 && prev[1] === new Date().getFullYear()) // first load
+            ) {
+              return computedRange
+            }
+            return prev
+          })
         }
         
         // initialize with current filters
@@ -1342,43 +1348,17 @@ function ChapterPageInner({ params }: ChapterPageProps) {
           // Show only links between center node and filtered nodes
           const currentNodeIds = new Set(nodes.filter(n => n.type === "current").map(n => n.id))
           const filteredNodeIds = new Set(nodes.map(n => n.id))
-          
-          console.log("🔗 [Initial Debug] Current node IDs:", Array.from(currentNodeIds))
-          console.log("🔗 [Initial Debug] Filtered node IDs:", Array.from(filteredNodeIds))
-          console.log("🔗 [Initial Debug] Total nodes:", nodes.length)
-          console.log("🔗 [Initial Debug] Original links count:", data.links.length)
-          console.log("🔗 [Initial Debug] Sample original links:", data.links.slice(0, 3).map(l => ({ 
-            source: l.source, 
-            target: l.target, 
-            sourceType: typeof l.source,
-            targetType: typeof l.target
-          })))
+
           
           const links = data.links.filter(l => {
             const sourceId = l.source as string
             const targetId = l.target as string
-            const hasCurrentAsSource = currentNodeIds.has(sourceId)
-            const hasCurrentAsTarget = currentNodeIds.has(targetId)
-            const hasFilteredAsSource = filteredNodeIds.has(sourceId)
-            const hasFilteredAsTarget = filteredNodeIds.has(targetId)
-            
-            const shouldInclude = (hasCurrentAsSource && hasFilteredAsTarget) ||
-                                 (hasCurrentAsTarget && hasFilteredAsSource)
-            
-            console.log(`🔗 [Initial Debug] Link ${sourceId}↔${targetId}:`, {
-              hasCurrentAsSource,
-              hasCurrentAsTarget,
-              hasFilteredAsSource,
-              hasFilteredAsTarget,
-              shouldInclude
-            })
-            
-            // Show link if it connects center node to any filtered node
-            return shouldInclude
+            const isSourceCenter = currentNodeIds.has(sourceId)
+            const isTargetCenter = currentNodeIds.has(targetId)
+            const isSourceFiltered = filteredNodeIds.has(sourceId)
+            const isTargetFiltered = filteredNodeIds.has(targetId)
+            return (isSourceCenter && isTargetFiltered) || (isTargetCenter && isSourceFiltered)
           })
-          
-          console.log("🔗 [Initial Debug] Final filtered links count:", links.length)
-          console.log("🔗 [Initial Debug] Final links:", links.map(l => ({ source: l.source, target: l.target })))
           
           return { nodes, links }
         })()
@@ -1428,42 +1408,13 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     const currentNodeIds = new Set(nodes.filter(n => n.type === "current").map(n => n.id))
     const filteredNodeIds = new Set(nodes.map(n => n.id))
     
-    console.log("🔗 [Link Debug] Current node IDs:", Array.from(currentNodeIds))
-    console.log("🔗 [Link Debug] Filtered node IDs:", Array.from(filteredNodeIds))
-    console.log("🔗 [Link Debug] Total nodes:", nodes.length)
-    console.log("🔗 [Link Debug] Original links count:", data.links.length)
-    console.log("🔗 [Link Debug] Sample original links:", data.links.slice(0, 3).map(l => ({ 
-      source: l.source, 
-      target: l.target, 
-      sourceType: typeof l.source,
-      targetType: typeof l.target
-    })))
     
     const links = data.links.filter(l => {
       const sourceId = l.source as string
       const targetId = l.target as string
-      const hasCurrentAsSource = currentNodeIds.has(sourceId)
-      const hasCurrentAsTarget = currentNodeIds.has(targetId)
-      const hasFilteredAsSource = filteredNodeIds.has(sourceId)
-      const hasFilteredAsTarget = filteredNodeIds.has(targetId)
-      
-      const shouldInclude = (hasCurrentAsSource && hasFilteredAsTarget) ||
-                           (hasCurrentAsTarget && hasFilteredAsSource)
-      
-      console.log(`🔗 [Link Debug] Link ${sourceId}↔${targetId}:`, {
-        hasCurrentAsSource,
-        hasCurrentAsTarget,
-        hasFilteredAsSource,
-        hasFilteredAsTarget,
-        shouldInclude
-      })
-      
-      // Show link if it connects center node to any filtered node
-      return shouldInclude
+      return filteredNodeIds.has(sourceId) && filteredNodeIds.has(targetId)
     })
     
-    console.log("🔗 [Link Debug] Final filtered links count:", links.length)
-    console.log("🔗 [Link Debug] Final links:", links.map(l => ({ source: l.source, target: l.target })))
     
     setFilteredGraphData({ nodes, links })
   }, [originalGraphData, activeFilters, yearRange])
@@ -1739,6 +1690,19 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       if (raf) cancelAnimationFrame(raf)
     }
   }, [chaptersData, targetVerseFromUrl, currentChapter, hasScrolledToTarget])
+
+  // Add this helper near parseNumericYear
+  function extractAllYears(period?: any): number[] {
+    if (period == null) return []
+    if (typeof period === "number" && Number.isFinite(period)) return [period]
+    if (Array.isArray(period)) {
+      return period.flatMap(item => extractAllYears(item))
+    }
+    const str = String(period)
+    const m = str.match(/-?\d{1,4}/g)
+    if (!m || m.length === 0) return []
+    return m.map(v => parseInt(v, 10)).filter(v => Number.isFinite(v))
+  }
 
   return (
     <div className="h-[calc(100vh-65px)] bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col overflow-hidden">
@@ -2648,8 +2612,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         </div>
                         <div className="px-1">
                           <Slider
-                            min={0}
-                            max={currentYear}
+                            min={defaultYearRange[0]}
+                            max={defaultYearRange[1]}
                             step={1}
                             value={yearRange}
                             onValueChange={(val: number[]) => {
