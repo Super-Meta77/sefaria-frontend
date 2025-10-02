@@ -1058,14 +1058,14 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         .style("font-size", "12px")
         .style("pointer-events", "none")
         .style("z-index", "1000")
-        .style("max-width", "200px")
-        .style("white-space", "nowrap")
+        .style("max-width", "300px")
+        .style("white-space", "normal")
         .style("overflow", "hidden")
-        .style("text-overflow", "ellipsis")
       
       tooltip.html(`
         <div><strong>${d.title}</strong></div>
         <div>${d.snippet}</div>
+        ${d.content ? `<div style="margin-top: 8px; font-size: 11px; color: #e5e7eb; max-height: 60px; overflow: hidden;">${d.content.substring(0, 150)}${d.content.length > 150 ? '...' : ''}</div>` : ''}
         ${d.metadata.author ? `<div><em>Author: ${d.metadata.author}</em></div>` : ''}
       `)
       
@@ -1273,29 +1273,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         console.log("🔗 [Connections] Number of nodes:", data.nodes?.length || 0);
         console.log("🔗 [Connections] Number of links:", data.links?.length || 0);
         
-        if (data.nodes && data.nodes.length > 0) {
-          console.log("🔗 [Connections] Node types:", data.nodes.map(n => n.type));
-          console.log("🔗 [Connections] First few nodes:", data.nodes.slice(0, 3).map(n => ({
-            id: n.id,
-            title: n.title,
-            type: n.type,
-            author: n.metadata.author,
-            timePeriod: n.metadata.timePeriod,
-            genre: n.metadata.genre,
-            snippet: n.snippet?.substring(0, 100) + "..."
-          })));
-        }
-        
-        if (data.links && data.links.length > 0) {
-          console.log("🔗 [Connections] Link types:", data.links.map(l => l.type));
-          console.log("🔗 [Connections] First few links:", data.links.slice(0, 3).map(l => ({
-            id: l.id,
-            source: l.source,
-            target: l.target,
-            type: l.type,
-            strength: l.strength
-          })));
-        }
         
         setOriginalGraphData(data as any)
         
@@ -2487,7 +2464,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                     initial={{ x: 300 }}
                     animate={{ x: 0 }}
                     exit={{ x: 300 }}
-                    className="w-96 bg-white border-l border-slate-200 p-4 overflow-y-auto shadow-xl"
+                    className="w-80 bg-white border-l border-slate-200 p-4 overflow-y-auto shadow-xl"
                   >
                     <h3 className="font-semibold text-slate-900 mb-4">Filters</h3>
                     
@@ -2594,7 +2571,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                               value={yearRange[0]}
                               onChange={(e) => {
                                 const v = Number(e.target.value || 0)
-                                setYearRange(([_, end]) => [Math.min(v, end), end])
+                                const clampedV = Math.max(defaultYearRange[0], Math.min(v, defaultYearRange[1]))
+                                setYearRange(([_, end]) => [Math.min(clampedV, end), end])
                               }}
                             />
                           </div>
@@ -2605,7 +2583,8 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                               value={yearRange[1]}
                               onChange={(e) => {
                                 const v = Number(e.target.value || 0)
-                                setYearRange(([start, _]) => [start, Math.max(v, start)])
+                                const clampedV = Math.max(defaultYearRange[0], Math.min(v, defaultYearRange[1]))
+                                setYearRange(([start, _]) => [start, Math.max(clampedV, start)])
                               }}
                             />
                           </div>
@@ -2618,7 +2597,10 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                             value={yearRange}
                             onValueChange={(val: number[]) => {
                               if (Array.isArray(val) && val.length === 2) {
-                                setYearRange([val[0], val[1]] as [number, number])
+                                // Ensure values are within the computed bounds
+                                const clampedStart = Math.max(defaultYearRange[0], Math.min(val[0], defaultYearRange[1]))
+                                const clampedEnd = Math.max(defaultYearRange[0], Math.min(val[1], defaultYearRange[1]))
+                                setYearRange([clampedStart, clampedEnd] as [number, number])
                                 }
                               }}
                             />
@@ -2646,7 +2628,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                 initial={{ x: -300 }}
                 animate={{ x: 0 }}
                 exit={{ x: -300 }}
-                className="w-80 bg-white border-r border-slate-200 p-4"
+                className="w-96 bg-white border-r border-slate-200 p-4 overflow-y-auto"
               >
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-slate-900">Preview</h3>
@@ -2665,12 +2647,15 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                   {selectedNodePreview ? (
                     <>
                       <div>
-                        <h4 className="font-medium text-slate-900">{selectedNodePreview.title}</h4>
-                        <Badge variant="secondary" className="mt-1">
-                          {selectedNodePreview.type}
-                        </Badge>
+                        <h3 className="font-large text-slate-900">{selectedNodePreview.title}</h3>
                       </div>
                       <p className="text-sm text-slate-600">{selectedNodePreview.snippet}</p>
+                      {selectedNodePreview.metadata.genre && (
+                        <div>
+                          <span className="text-xs text-slate-500">Genre: </span>
+                          <span className="text-sm text-slate-700">{selectedNodePreview.metadata.genre}</span>
+                        </div>
+                      )}
                       {selectedNodePreview.metadata.author && (
                         <div>
                           <span className="text-xs text-slate-500">Author: </span>
@@ -2680,7 +2665,16 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                       {selectedNodePreview.metadata.timePeriod && (
                         <div>
                           <span className="text-xs text-slate-500">Period: </span>
-                          <span className="text-sm text-slate-700">{selectedNodePreview.metadata.timePeriod}</span>
+                          <span className="text-sm text-slate-700">[ {selectedNodePreview.metadata.timePeriod[0]}, {selectedNodePreview.metadata.timePeriod[1]}]</span>
+                        </div>
+                      )}
+                      {selectedNodePreview.content && (
+                        <div>
+                          <span className="text-xs text-slate-500">Content: </span>
+                          <span className="text-sm text-slate-700"
+                            dir="ltr"
+                            dangerouslySetInnerHTML={{ __html: selectedNodePreview.content }}
+                          />
                         </div>
                       )}
                     </>

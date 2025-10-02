@@ -265,12 +265,25 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
                   <Badge variant="secondary">{(hoveredNode || selectedNode)?.type}</Badge>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-slate-600 mb-4">
-                    {(hoveredNode || selectedNode)?.snippet ||
-                      "This text discusses the timing of evening prayers and connects to broader themes of ritual obligation."}
-                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-slate-900 mb-1">Summary</h4>
+                      <p className="text-sm text-slate-600">
+                        {(hoveredNode || selectedNode)?.snippet ||
+                          "This text discusses the timing of evening prayers and connects to broader themes of ritual obligation."}
+                      </p>
+                    </div>
+                    {(hoveredNode || selectedNode)?.content && (
+                      <div>
+                        <h4 className="text-sm font-medium text-slate-900 mb-1">Content</h4>
+                        <p className="text-xs text-slate-600 max-h-32 overflow-y-auto">
+                          {(hoveredNode || selectedNode)?.content}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   {selectedNode && (
-                    <Button size="sm" className="w-full" onClick={() => onNodeClick(selectedNode)}>
+                    <Button size="sm" className="w-full mt-4" onClick={() => onNodeClick(selectedNode)}>
                       Open in Main View
                     </Button>
                   )}

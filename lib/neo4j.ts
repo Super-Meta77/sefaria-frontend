@@ -74,12 +74,17 @@ function toGraphNode(node: any): GraphNode {
   const rawType = (props.type || "commentary").toString().toLowerCase()
   const allowedTypes = ["current","halakhic","aggadic","lexical","responsa","commentary","mishnah","talmud","kabbalah"] as const
   const normalizedType = (allowedTypes.includes(rawType as any) ? rawType : "commentary") as GraphNode["type"]
+  
+  // Enhanced content field mapping - try multiple possible property names
+  const content = props.content_en ||
+                  undefined
+
   return {
     id: props.id || title,
     title,
     type: normalizedType,
     snippet: props.snippet || props.summary || "",
-    content: props.content || props.fullText || undefined,
+    content,
     url: props.url || undefined,
     color: props.color || undefined,
     metadata: {
@@ -102,7 +107,6 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       { id: verseId }
     )
 
-    console.log(result);
 
     // Create a center node representing the selected verse
     const centerNode: GraphNode = {
@@ -110,6 +114,7 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       title: verseId,
       type: "current",
       snippet: "Selected verse",
+      content: undefined, // Will be populated if available in the database
       metadata: {},
     }
 
@@ -123,6 +128,7 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
     for (const record of result.records) {
       const neoNode = record.get("connected")
       if (!neoNode) continue
+      
       const connectedNode = toGraphNode(neoNode)
 
       // Map relationship properties onto node metadata for filtering
