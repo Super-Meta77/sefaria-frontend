@@ -12,6 +12,7 @@ interface Node extends d3.SimulationNodeDatum {
   title: string
   type: string
   snippet?: string
+  content?: string
 }
 
 interface Link extends d3.SimulationLinkDatum<Node> {
@@ -48,10 +49,25 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
     const svg = d3.select(svgRef.current)
     svg.selectAll("*").remove()
 
-    const width = 800
-    const height = 600
+    // Calculate proportional surface size based on node count
+    const initialNodeCount = (data as any).initialNodeCount || data.nodes.length || 20
+    const currentNodeCount = data.nodes.length
+    const surfaceRatio = Math.max(0.4, Math.min(1.2, Math.sqrt(currentNodeCount / initialNodeCount)))
+    
+    // Base dimensions scaled proportionally
+    const baseWidth = 800
+    const baseHeight = 600
+    const width = baseWidth * surfaceRatio
+    const height = baseHeight * surfaceRatio
     const centerX = width / 2
     const centerY = height / 2
+
+    console.log("🎯 [InteractiveGraph] Surface scaling:", {
+      initialNodeCount,
+      currentNodeCount,
+      surfaceRatio,
+      dimensions: { width, height }
+    })
 
     // Color mapping for edge types
     const edgeColors = {
@@ -75,7 +91,29 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
     const nodes = data.nodes.map((d) => ({ ...d }))
     const links = data.links.map((d) => ({ ...d }))
 
-    // Create simulation
+    // Calculate adaptive scaling based on node count to maintain visual consistency
+    const nodeCount = nodes.length
+    const baseNodeCount = 10 // Reference node count for scaling
+    const scaleFactor = Math.max(0.5, Math.min(2.0, Math.sqrt(baseNodeCount / Math.max(1, nodeCount))))
+    
+    // Adaptive parameters that scale with node count
+    const linkDistance = Math.max(80, 150 * scaleFactor)
+    const chargeStrength = Math.max(-800, -300 * scaleFactor)
+    const collisionRadius = Math.max(25, 40 * scaleFactor)
+    const nodeRadius = (d: any) => (d.id === "current" ? Math.max(15, 25 * scaleFactor) : Math.max(12, 20 * scaleFactor))
+
+    // Console log scaling parameters for debugging
+    console.log("🎯 [InteractiveGraph] Scaling parameters:", {
+      nodeCount,
+      scaleFactor,
+      linkDistance,
+      chargeStrength,
+      collisionRadius,
+      currentNodeRadius: Math.max(15, 25 * scaleFactor),
+      regularNodeRadius: Math.max(12, 20 * scaleFactor)
+    })
+
+    // Create simulation with adaptive parameters and boundary constraints
     const simulation = d3
       .forceSimulation(nodes)
       .force(
@@ -83,19 +121,36 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
         d3
           .forceLink(links)
           .id((d: any) => d.id)
-          .distance(150),
+          .distance(linkDistance),
       )
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("charge", d3.forceManyBody().strength(chargeStrength))
       .force("center", d3.forceCenter(centerX, centerY))
-      .force("collision", d3.forceCollide().radius(40))
+      .force("collision", d3.forceCollide().radius(collisionRadius))
+      .force("boundary", () => {
+        // Keep nodes within graph boundaries with padding
+        const padding = 50
+        nodes.forEach(node => {
+          if (node.x !== undefined) {
+            node.x = Math.max(padding, Math.min(width - padding, node.x))
+          }
+          if (node.y !== undefined) {
+            node.y = Math.max(padding, Math.min(height - padding, node.y))
+          }
+        })
+      })
+
+    // Set SVG viewBox to match proportional dimensions
+    svg.attr("viewBox", `0 0 ${width} ${height}`)
+       .attr("preserveAspectRatio", "xMidYMid meet")
 
     // Create container group
     const container = svg.append("g")
 
-    // Add zoom behavior
+    // Add zoom behavior with containment
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 3])
+      .translateExtent([[0, 0], [width, height]]) // Constrain panning to graph boundaries
       .on("zoom", (event) => {
         container.attr("transform", event.transform)
       })
@@ -122,10 +177,10 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
       .attr("class", "node")
       .style("cursor", "pointer")
 
-    // Add circles to nodes
+    // Add circles to nodes with adaptive sizing
     nodeElements
       .append("circle")
-      .attr("r", (d: any) => (d.id === "current" ? 25 : 20))
+      .attr("r", nodeRadius)
       .attr("fill", (d: any) => nodeColors[d.type as keyof typeof nodeColors] || "#999")
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
@@ -175,16 +230,33 @@ export default function InteractiveGraph({ data, onNodeClick, onClose }: Interac
 
     nodeElements.call(drag)
 
-    // Update positions on simulation tick
+    // Update positions on simulation tick with proper link positioning
     simulation.on("tick", () => {
+      // Update link positions based on current node positions
       linkElements
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y)
+        .attr("x1", (d: any) => {
+          const source = typeof d.source === 'object' ? d.source : nodes.find(n => n.id === d.source)
+          return source?.x || 0
+        })
+        .attr("y1", (d: any) => {
+          const source = typeof d.source === 'object' ? d.source : nodes.find(n => n.id === d.source)
+          return source?.y || 0
+        })
+        .attr("x2", (d: any) => {
+          const target = typeof d.target === 'object' ? d.target : nodes.find(n => n.id === d.target)
+          return target?.x || 0
+        })
+        .attr("y2", (d: any) => {
+          const target = typeof d.target === 'object' ? d.target : nodes.find(n => n.id === d.target)
+          return target?.y || 0
+        })
 
-      nodeElements.attr("transform", (d: any) => `translate(${d.x},${d.y})`)
+      // Update node positions
+      nodeElements.attr("transform", (d: any) => `translate(${d.x || 0},${d.y || 0})`)
     })
+
+    // Restart simulation with higher alpha to ensure proper layout
+    simulation.alpha(1).restart()
 
     return () => {
       simulation.stop()
