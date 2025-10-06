@@ -63,7 +63,7 @@ function CategoryPageInner() {
 
     // Check for Tosefta tabs (any contents with category property for Tosefta)
     const hasToseftaTabs =
-      categoryItem.category.toLowerCase() === "tosefta" &&
+      categoryItem.category === "Tosefta" &&
       categoryItem.contents.some((content: any) => content.category);
 
     return hasTalmudTabs || hasToseftaTabs;
@@ -211,9 +211,7 @@ function CategoryPageInner() {
                                         <CardHeader className="pb-2">
                                           <CardTitle className="text-lg">
                                             <Link
-                                              href={`/${childTitle
-                                                .toLowerCase()
-                                                .replace(/\s+/g, "-")}`}
+                                              href={`/${childTitle.replace(/\s+/g, "-")}`}
                                               className="text-blue-600 hover:text-blue-800 font-medium transition-colors group-hover:text-blue-800"
                                             >
                                               {language === "en"
@@ -282,9 +280,7 @@ function CategoryPageInner() {
                                       className="hover:shadow-md transition-shadow cursor-pointer group"
                                     >
                                       <Link
-                                        href={`/${childTitle
-                                          .toLowerCase()
-                                          .replace(/\s+/g, "-")}`}
+                                        href={`/${childTitle.replace(/\s+/g, "-")}`}
                                         className="text-blue-600 hover:text-blue-800 font-medium transition-colors group-hover:text-blue-800"
                                       >
                                         <CardHeader className="pb-2">
@@ -334,7 +330,7 @@ function CategoryPageInner() {
                 </div>
 
                 {/* Weekly Torah Portion - only show for Tanakh */}
-                {categoryItem.category.toLowerCase() === "tanakh" && (
+                {categoryItem.category === "Tanakh" && (
                   <div>
                     <h3 className="text-xl font-medium text-gray-900 mb-3 border-b border-gray-200 pb-2">
                       Weekly Torah Portion
@@ -379,7 +375,7 @@ function CategoryPageInner() {
                 )}
 
                 {/* Visualizations - only show for Tanakh */}
-                {categoryItem.category.toLowerCase() === "tanakh" && (
+                {categoryItem.category === "Tanakh" && (
                   <div>
                     <h3 className="text-xl font-medium text-gray-900 mb-3 border-b border-gray-200 pb-2">
                       Visualizations

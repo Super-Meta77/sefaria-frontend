@@ -438,7 +438,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       }));
 
       const response = await fetch(
-        `https://www.sefaria.org/api/v3/texts/${book}.${chapterNum}?version=hebrew%7CMiqra%20according%20to%20the%20Masorah&version=translation&fill_in_missing_segments=1&return_format=wrap_all_entities`
+        `https://www.sefaria.org/api/v3/texts/${book}.${chapterNum}?version=hebrew&version=translation`
       );
 
       if (!response.ok) {
@@ -493,7 +493,6 @@ function ChapterPageInner({ params }: ChapterPageProps) {
         const hebrewVerses = data.versions?.find((v: any) => v.language === "he")?.text || [];
         const englishVerses = data.versions?.find((v: any) => v.language === "en")?.text || [];
 
-        console.log("7fetchChapter---->");
         
         combinedVerses = hebrewVerses.map((hebrewVerse: string, index: number) => ({
           hebrew: hebrewVerse,
@@ -2028,7 +2027,12 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {chapterData.verses.map((verse) => (
+                          {chapterData.verses
+                            .filter((verse) => {
+                              return (typeof verse.hebrew === "string" && verse.hebrew !== "") || 
+                                     (typeof verse.english === "string" && verse.english !== "");
+                            })
+                            .map((verse) => (
                       <motion.div
                         key={`${verse.chapterNumber}-${verse.verseNumber}`}
                         ref={(el: HTMLDivElement | null) => { verseRefs.current[`${verse.chapterNumber}-${verse.verseNumber}`] = el as HTMLElement | null }}

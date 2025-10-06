@@ -213,9 +213,7 @@ function BookPageInner() {
                     return (
                       <div key={index} className="space-y-2">
                         <Link
-                          href={`/texts/${params.category}/${item.title
-                            ?.toLowerCase()
-                            .replace(/\s+/g, "-")}`}
+                          href={`/texts/${params.category}/${item.title.replace(/\s+/g, "-")}`}
                           className="text-blue-600 hover:text-blue-800 font-medium text-lg transition-colors block"
                         >
                           {item.base_text_titles?.[0] || item.title}

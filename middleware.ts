@@ -51,7 +51,7 @@ export async function middleware(req: NextRequest) {
   const bookOnlyMatch = pathname.match(/^\/([^\/.]+)\/?$/)
   if (bookOnlyMatch) {
     const bookSlug = bookOnlyMatch[1]
-    if (RESERVED_TOP_LEVEL.has('/' + bookSlug.toLowerCase())) {
+    if (RESERVED_TOP_LEVEL.has('/' + bookSlug)) {
       return NextResponse.next()
     }
     try {
@@ -61,7 +61,7 @@ export async function middleware(req: NextRequest) {
         const data = await res.json()
         const category = (Array.isArray(data?.categories) ? data.categories[0] : data?.category) || 'texts'
         const rewriteUrl = req.nextUrl.clone()
-        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category).toLowerCase())}/${bookSlug}`
+        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category))}/${bookSlug}`
         return NextResponse.rewrite(rewriteUrl)
       }
     } catch {}
@@ -73,7 +73,7 @@ export async function middleware(req: NextRequest) {
   if (bookChapterMatch) {
     const bookSlug = bookChapterMatch[1]
     const chapter = bookChapterMatch[2]
-    if (RESERVED_TOP_LEVEL.has('/' + bookSlug.toLowerCase())) {
+    if (RESERVED_TOP_LEVEL.has('/' + bookSlug)) {
       return NextResponse.next()
     }
     try {
@@ -83,7 +83,7 @@ export async function middleware(req: NextRequest) {
         const data = await res.json()
         const category = (Array.isArray(data?.categories) ? data.categories[0] : data?.category) || 'texts'
         const rewriteUrl = req.nextUrl.clone()
-        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category).toLowerCase())}/${bookSlug}/${chapter}`
+        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category))}/${bookSlug}/${chapter}`
         return NextResponse.rewrite(rewriteUrl)
       }
     } catch {}
@@ -96,7 +96,7 @@ export async function middleware(req: NextRequest) {
     const bookSlug = bookChapterVerseMatch[1]
     const chapter = bookChapterVerseMatch[2]
     const verse = bookChapterVerseMatch[3]
-    if (RESERVED_TOP_LEVEL.has('/' + bookSlug.toLowerCase())) {
+    if (RESERVED_TOP_LEVEL.has('/' + bookSlug)) {
       return NextResponse.next()
     }
     try {
@@ -106,8 +106,7 @@ export async function middleware(req: NextRequest) {
         const data = await res.json()
         const category = (Array.isArray(data?.categories) ? data.categories[0] : data?.category) || 'texts'
         const rewriteUrl = req.nextUrl.clone()
-        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category).toLowerCase())}/${bookSlug}/${chapter}`
-        rewriteUrl.hash = `#${verse}`
+        rewriteUrl.pathname = `/texts/${encodeURIComponent(String(category))}/${bookSlug}/${chapter}/${verse}`
         return NextResponse.rewrite(rewriteUrl)
       }
     } catch {}

@@ -71,7 +71,7 @@ export type GraphData = {
 function toGraphNode(node: any): GraphNode {
   const props = (node && node.properties) || {}
   const title = props.title || props.id || "Unknown"
-  const rawType = (props.type || "commentary").toString().toLowerCase()
+  const rawType = (props.type || "commentary").toString()
   const allowedTypes = ["current","halakhic","aggadic","lexical","responsa","commentary","mishnah","talmud","kabbalah"] as const
   const normalizedType = (allowedTypes.includes(rawType as any) ? rawType : "commentary") as GraphNode["type"]
   
