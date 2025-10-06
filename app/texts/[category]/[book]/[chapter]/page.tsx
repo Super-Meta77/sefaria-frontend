@@ -282,6 +282,46 @@ function ChapterPageInner({ params }: ChapterPageProps) {
   const { book, chapter, verse } = params
   const router = useRouter()
 
+  // Helper function to separate Hebrew and English from bilingual commentary text
+  const separateHebrewAndEnglish = (text: string): [string, string] => {
+    // Look for pattern: Hebrew text, then comma or dash, then English text
+    // This matches formats like: "ויברך אלוקים את יום השביעי , when the seventh day arrived..."
+    const match = text.match(/^([\u0590-\u05FF\uFB1D-\uFB4F\s]+)[\s,]*([\s\-–—]*)(.+)$/);
+    
+    if (match) {
+      const [, hebrewPart, separator, englishPart] = match;
+      const hebrew = hebrewPart.trim();
+      const english = englishPart.trim();
+      
+      // Verify the first part contains Hebrew characters
+      if (/[\u0590-\u05FF\uFB1D-\uFB4F]/.test(hebrew)) {
+        return [hebrew, english];
+      }
+    }
+    
+    // Fallback: try basic comma/hyphen separation for any comma-separated text
+    const basicMatch = text.match(/^([^,\-–—]+?)[\s]*[,,\-–—]+[\s]*(.+)$/);
+    if (basicMatch) {
+      const [, firstPart, secondPart] = basicMatch;
+      const first = firstPart.trim();
+      const second = secondPart.trim();
+      
+      // Check if first part contains mostly English (Latin alphabet)
+      const hasHebrew = /[\u0590-\u05FF\uFB1D-\uFB4F]/.test(first);
+      const hasEnglish = /[a-zA-Z]/.test(first);
+      
+      if (hasHebrew && !hasEnglish) {
+        return [first, second];
+      } else if (hasHebrew && hasEnglish) {
+        // Mixed content - use simpler approach
+        return [first, second];
+      }
+    }
+    
+    // Last resort: return the whole text as Hebrew
+    return [text.trim(), ""];
+  };
+
   // State for chapter data
   const [chaptersData, setChaptersData] = useState<{ [key: number | string]: ChapterData }>({});
   const [displayMode, setDisplayMode] = useState<"hebrew" | "english" | "bilingual">("bilingual");
@@ -406,20 +446,64 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       }
 
       const data = await response.json();
+      let combinedVerses: VerseData[] = [];
       
-      // Extract Hebrew and English verses from the versions
-      const hebrewVerses = data.versions?.find((v: any) => v.language === "he")?.text || [];
-      const englishVerses = data.versions?.find((v: any) => v.language === "en")?.text || [];
-      
-      // Combine Hebrew and English verses with HTML content
-      const combinedVerses: VerseData[] = hebrewVerses.map((hebrewVerse: string, index: number) => ({
-        hebrew: hebrewVerse,
-        english: englishVerses[index] || "",
-        hebrewHtml: hebrewVerse,
-        englishHtml: englishVerses[index] || "",
-        verseNumber: index + 1,
-        chapterNumber: chapterNum
-      }));
+      // Check if this is commentary data (has text array) or regular text (has versions array)
+      if (data.text && Array.isArray(data.text)) {
+        // Commentary data: text array contains bilingual entries
+        combinedVerses = data.text
+          .map((textEntry: string | string[], index: number) => {
+            // Skip empty entries
+            if (!textEntry || (Array.isArray(textEntry) && textEntry.length === 0)) {
+              return null;
+            }
+            
+            // Extract verse number from index (0-based) + 1
+            const verseNumber = index + 1;
+            
+            if (Array.isArray(textEntry) && textEntry.length > 0) {
+              // Multiple strings in the entry
+              const allText = textEntry.join(' ');
+              const [hebrew, english] = separateHebrewAndEnglish(allText);
+              return {
+                hebrew: hebrew || "",
+                english: english || "",
+                hebrewHtml: hebrew || "",
+                englishHtml: english || "",
+                verseNumber,
+                chapterNumber: chapterNum
+              };
+            } else if (typeof textEntry === 'string' && textEntry.trim()) {
+              // Single string entry (bilingual)
+              const [hebrew, english] = separateHebrewAndEnglish(textEntry);
+              return {
+                hebrew: hebrew || "",
+                english: english || "",
+                hebrewHtml: hebrew || "",
+                englishHtml: english || "",
+                verseNumber,
+                chapterNumber: chapterNum
+              };
+            }
+            return null;
+          })
+          .filter((verse: VerseData | null) => verse !== null) as VerseData[];
+      } else {
+        // Regular text data: versions array with separate Hebrew/English
+        const hebrewVerses = data.versions?.find((v: any) => v.language === "he")?.text || [];
+        const englishVerses = data.versions?.find((v: any) => v.language === "en")?.text || [];
+
+        console.log("7fetchChapter---->");
+        
+        combinedVerses = hebrewVerses.map((hebrewVerse: string, index: number) => ({
+          hebrew: hebrewVerse,
+          english: englishVerses[index] || "",
+          hebrewHtml: hebrewVerse,
+          englishHtml: englishVerses[index] || "",
+          verseNumber: index + 1,
+          chapterNumber: chapterNum
+        }));
+      }
 
       // If we're prepending content above the current view, preserve scroll position anchored to an element
       const scroller = scrollerRef.current
@@ -824,26 +908,35 @@ function ChapterPageInner({ params }: ChapterPageProps) {
     // "Targum Jonathan on Genesis 19:18" -> "/Targum_Jonathan_on_Genesis.19.18"
     
     // Split by space to separate book name from chapter:verse
+    console.log("Title:", title)
     const parts = title.trim().split(' ')
+    console.log("Parts:", parts)
     if (parts.length < 2) return null
-    
+    console.log("Parts length:", parts.length)
     // Get the last part (chapter:verse) and the rest (book name)
     const chapterVerse = parts[parts.length - 1]
+    console.log("Chapter verse:", chapterVerse)
     const bookName = parts.slice(0, -1).join(' ')
-    
+    console.log("Book name:", bookName)
     // Check if the last part contains chapter:verse format
-    const chapterVerseMatch = chapterVerse.match(/^(\d+):(\d+)$/)
+    // Supports formats: "1:2", "1:2:3", "1a:2", etc.
+    // Chapter can be alphanumeric, verse must be numeric
+    const chapterVerseMatch = chapterVerse.match(/^([a-zA-Z0-9]+(?::[a-zA-Z0-9]+)*)(?::(\d+))$/)
+    console.log("Chapter verse match:", chapterVerseMatch)
     if (!chapterVerseMatch) return null
     
-    const [, chapter, verse] = chapterVerseMatch
+    const [, chapterWithColons, verse] = chapterVerseMatch
+    
+    // Convert all colons in chapter to dots for consistent URL formatting
+    const chapterWithDots = chapterWithColons.replace(/:/g, '.')
     
     // Convert book name: capitalize each word and replace spaces with underscores
     const bookPath = bookName
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join('_')
-    
-    return `/${bookPath}.${chapter}.${verse}`
+    console.log("Book path:", bookPath)
+    return `/${bookPath}.${chapterWithDots}.${verse}`
   }
   const graphRef = useRef<HTMLDivElement>(null)
   const svgSelectionRef = useRef<any>(null)
@@ -1065,7 +1158,7 @@ function ChapterPageInner({ params }: ChapterPageProps) {
       tooltip.html(`
         <div><strong>${d.title}</strong></div>
         <div>${d.snippet}</div>
-        ${d.content ? `<div style="margin-top: 8px; font-size: 11px; color: #e5e7eb; max-height: 60px; overflow: hidden;">${d.content.substring(0, 150)}${d.content.length > 150 ? '...' : ''}</div>` : ''}
+        ${d.content && typeof d.content === 'string' ? `<div style="margin-top: 8px; font-size: 11px; color: #e5e7eb; max-height: 60px; overflow: hidden;">${d.content.substring(0, 150)}${d.content.length > 150 ? '...' : ''}</div>` : ''}
         ${d.metadata.author ? `<div><em>Author: ${d.metadata.author}</em></div>` : ''}
       `)
       
@@ -2693,8 +2786,10 @@ function ChapterPageInner({ params }: ChapterPageProps) {
                       if (!selectedNodePreview) return
                       
                       // Parse the node title to get the URL path
+                      console.log("Selected node preview title:", selectedNodePreview.title)
                       const targetPath = parseNodeTitleToPath(selectedNodePreview.title)
-                      
+                      console.log("Target path:", targetPath)
+
                       if (targetPath) {
                         // Navigate to the parsed path
                         router.push(targetPath)

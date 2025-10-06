@@ -103,7 +103,7 @@ export async function fetchConnectionsForVerse(verseId: string): Promise<GraphDa
       `MATCH (n {id: $id})-[r]-(connected)
        RETURN connected, r AS rel, type(r) AS relType,
               CASE WHEN startNode(r) = n THEN 'out' ELSE 'in' END AS dir
-       LIMIT 20`,
+       LIMIT 50`,
       { id: verseId }
     )
 

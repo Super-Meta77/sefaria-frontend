@@ -3,9 +3,8 @@ import type { NextRequest } from 'next/server'
 
 function normalizeBookParam(raw: string): string {
   // Keep incoming slug as-is; Sefaria API expects title, so try to de-slug for fetching only
-  const withSpaces = decodeURIComponent(raw).replace(/-/g, ' ')
-  // Capitalize words
-  return withSpaces.replace(/\b\w/g, (c) => c.toUpperCase())
+  // Only decode URI encoding and convert dashes to spaces, but keep original casing
+  return decodeURIComponent(raw).replace(/-/g, ' ')
 }
 
 export async function middleware(req: NextRequest) {
